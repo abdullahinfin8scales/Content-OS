@@ -9,6 +9,8 @@ export class ContentDB extends Dexie {
   declare docs: Table<Doc, ID>;
   declare contents: Table<DocContent, ID>;
   declare texts: Table<DocText, ID>;
+  /** Small app-level records (e.g. the automatic-backup folder handle). */
+  declare meta: Table<{ key: string; value: unknown }, string>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -19,5 +21,6 @@ export class ContentDB extends Dexie {
       contents: 'id',
       texts: 'id',
     });
+    this.version(2).stores({ meta: 'key' });
   }
 }

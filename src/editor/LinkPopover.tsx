@@ -64,9 +64,16 @@ export function LinkPopover({ editor, at, onClose }: { editor: Editor; at: { lef
       />
       {existing && (
         <>
-          <IconButton label="Open link" size="sm" onClick={() => window.open(existing, '_blank', 'noopener,noreferrer')}>
+          <a
+            href={existing}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open link"
+            data-tip="Open link"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-2 transition-colors hover:bg-hover hover:text-fg"
+          >
             <ExternalLink size={14} />
-          </IconButton>
+          </a>
           <IconButton
             label="Remove link"
             size="sm"

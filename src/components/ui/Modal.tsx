@@ -32,7 +32,8 @@ export function Modal({ open, onClose, title, description, children, footer, wid
     // Focus the first field (or the panel) once mounted.
     requestAnimationFrame(() => {
       if (!node || node.contains(document.activeElement)) return;
-      const first = node.querySelector<HTMLElement>('[data-autofocus]') ?? node.querySelector<HTMLElement>('input, textarea, select');
+      const first = node.querySelector<HTMLElement>('[data-autofocus]') ??
+        node.querySelector<HTMLElement>('input:not([type="hidden"]):not([type="file"]):not([hidden]), textarea:not([readonly]), select');
       (first ?? node).focus();
     });
     const onKey = (e: KeyboardEvent) => {

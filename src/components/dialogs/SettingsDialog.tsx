@@ -1,11 +1,14 @@
-import { Download, HardDrive, Lock, ShieldCheck, Upload } from 'lucide-react';
+import { ClipboardCopy, Download, FolderOpen, HardDrive, Lock, ShieldCheck, Upload } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Mark } from '../../brand/Logo';
 import { backupFileName, BackupError, clearAll, exportBackup, parseBackup, restoreBackup } from '../../lib/backup';
+import { IS_PREVIEW } from '../../lib/env';
+import { formatRelative } from '../../lib/dates';
 import { navigate, paths } from '../../lib/router';
 import type { DocFont } from '../../lib/types';
-import { downloadFile } from '../../state/actions';
+import { copyToClipboard, downloadFile } from '../../state/actions';
 import { confirmDialog, toast } from '../../state/feedback';
+import { backupNow, chooseBackupFolder, reconnectBackupFolder, turnOffAutoBackup, useBackup } from '../../state/backup';
 import { db } from '../../state/repo';
 import { useSettings, type ThemePref } from '../../state/settings';
 import { useUI } from '../../state/ui';
@@ -57,6 +60,9 @@ export function SettingsDialog() {
   const settings = useSettings();
   const fileInput = useRef<HTMLInputElement>(null);
   const [storage, setStorage] = useState<{ usage?: number; quota?: number; persisted?: boolean }>({});
+  // Preview only: the backup text is prepared up front so "Copy" runs inside the click.
+  const [previewJson, setPreviewJson] = useState('');
+  const [showJson, setShowJson] = useState(false);
 
   const refreshStorage = async () => {
     const est = await navigator.storage?.estimate?.().catch(() => undefined);
@@ -65,7 +71,10 @@ export function SettingsDialog() {
   };
 
   useEffect(() => {
-    if (open) void refreshStorage();
+    if (!open) return;
+    void refreshStorage();
+    setShowJson(false);
+    if (IS_PREVIEW) void exportBackup(db).then((b) => setPreviewJson(JSON.stringify(b)));
   }, [open]);
 
   const close = () => setUI({ settingsOpen: false });
@@ -73,6 +82,7 @@ export function SettingsDialog() {
   const doExport = async () => {
     const backup = await exportBackup(db);
     downloadFile(backupFileName(), JSON.stringify(backup, null, 2), 'application/json');
+    settings.set({ lastBackupAt: Date.now() });
     toast(`Backup saved — ${backup.docs.length} document${backup.docs.length === 1 ? '' : 's'}`, { tone: 'success' });
   };
 
@@ -122,80 +132,116 @@ export function SettingsDialog() {
     toast(granted ? 'Storage is now protected from automatic cleanup' : 'The browser declined — keep regular backups', { tone: granted ? 'success' : 'default' });
   };
 
-  return (
-    <Modal open={open} onClose={close} title="Settings" width={620} labelledBy="settings-title">
-      <div className="px-6 pb-6">
-        <div className="label-display mt-3 mb-1">Profile</div>
-        <Row title="Your name" hint="Used for the greeting on Home.">
+  const profileAndWriting = (
+    <>
+      <div className="label-display mt-7 mb-1">Profile</div>
+      <Row title="Your name" hint="Used for the greeting on Home.">
+        <input
+          id="settings-name"
+          value={settings.displayName}
+          onChange={(e) => settings.set({ displayName: e.target.value })}
+          placeholder="Your name"
+          className="field w-full text-[13px] sm:w-[220px]"
+          maxLength={40}
+        />
+      </Row>
+
+      <div className="label-display mt-6 mb-1">Appearance & writing</div>
+      <Row title="Theme" hint="The infin8scale look is dark-first.">
+        <Choice<ThemePref>
+          value={settings.theme}
+          onChange={(theme) => settings.set({ theme })}
+          options={[
+            { value: 'dark', label: 'Dark' },
+            { value: 'light', label: 'Light' },
+            { value: 'system', label: 'System' },
+          ]}
+        />
+      </Row>
+      <Row title="Default font" hint="For new documents. Each document can switch in its Details panel.">
+        <Choice<DocFont>
+          value={settings.defaultFont}
+          onChange={(defaultFont) => settings.set({ defaultFont })}
+          options={[
+            { value: 'sans', label: 'Sans' },
+            { value: 'serif', label: 'Serif' },
+            { value: 'mono', label: 'Mono' },
+          ]}
+        />
+      </Row>
+      <Row title="Speaking pace" hint={`Used for “spoken time” on scripts. Most creators land between 140 and 170 words per minute.`}>
+        <div className="flex items-center gap-3">
           <input
-            value={settings.displayName}
-            onChange={(e) => settings.set({ displayName: e.target.value })}
-            placeholder="Your name"
-            className="field w-full text-[13px] sm:w-[220px]"
-            maxLength={40}
+            id="settings-wpm"
+            type="range"
+            min={100}
+            max={220}
+            step={5}
+            value={settings.wpm}
+            onChange={(e) => settings.set({ wpm: Number(e.target.value) })}
+            className="w-[150px] accent-[var(--brand)]"
+            aria-label="Words per minute"
           />
-        </Row>
+          <span className="w-[64px] text-right text-[12.5px] text-fg-2 tabular-nums">{settings.wpm} wpm</span>
+        </div>
+      </Row>
+    </>
+  );
 
-        <div className="label-display mt-6 mb-1">Appearance & writing</div>
-        <Row title="Theme" hint="The infin8scale look is dark-first.">
-          <Choice<ThemePref>
-            value={settings.theme}
-            onChange={(theme) => settings.set({ theme })}
-            options={[
-              { value: 'dark', label: 'Dark' },
-              { value: 'light', label: 'Light' },
-              { value: 'system', label: 'System' },
-            ]}
-          />
-        </Row>
-        <Row title="Default font" hint="For new documents. Each document can switch in its Details panel.">
-          <Choice<DocFont>
-            value={settings.defaultFont}
-            onChange={(defaultFont) => settings.set({ defaultFont })}
-            options={[
-              { value: 'sans', label: 'Sans' },
-              { value: 'serif', label: 'Serif' },
-              { value: 'mono', label: 'Mono' },
-            ]}
-          />
-        </Row>
-        <Row title="Speaking pace" hint={`Used for “spoken time” on scripts. Most creators land between 140 and 170 words per minute.`}>
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={100}
-              max={220}
-              step={5}
-              value={settings.wpm}
-              onChange={(e) => settings.set({ wpm: Number(e.target.value) })}
-              className="w-[150px] accent-[var(--brand)]"
-              aria-label="Words per minute"
-            />
-            <span className="w-[64px] text-right text-[12.5px] text-fg-2 tabular-nums">{settings.wpm} wpm</span>
-          </div>
-        </Row>
-
-        <div className="label-display mt-6 mb-1">Your data</div>
+  return (
+    <Modal open={open} onClose={close} title="Settings" width={640} labelledBy="settings-title">
+      <div className="px-6 pb-6">
+        <div className="label-display mt-3 mb-1">Backups & data</div>
         <div className="mt-2 flex items-start gap-3 rounded-xl border border-line bg-sunken p-3.5 text-[12.5px] leading-relaxed text-fg-2">
           <Lock size={15} className="mt-0.5 shrink-0 text-fg-3" />
-          <div>
-            Everything is stored privately in this browser (IndexedDB) — nothing is uploaded. That also means it lives on this device only: clearing site data
-            or switching browsers will not bring it along. <span className="text-fg">Export a backup regularly.</span>
-          </div>
+          {IS_PREVIEW ? (
+            <div>
+              This is a preview for trying the app. What you write stays in this browser, for this page only, and the browser can clear it.{' '}
+              <span className="text-fg">Keep the posts you care about in the app on your laptop.</span> To carry anything over, copy the backup here and
+              restore it there.
+            </div>
+          ) : (
+            <div>
+              Everything stays in this browser on this laptop — nothing is uploaded. Browser storage can still be wiped (clearing site data, a reinstall, a
+              broken laptop), so <span className="text-fg">keep a copy outside the browser.</span>
+            </div>
+          )}
         </div>
+        {!IS_PREVIEW && <AutoBackupRow />}
         <Row
-          title="Backup"
-          hint={storage.usage !== undefined ? `Using ${formatBytes(storage.usage)}${storage.quota ? ` of ${formatBytes(storage.quota)} available` : ''}.` : 'A single JSON file with every space, folder and document.'}
+          title="Backup file"
+          hint={
+            <>
+              {settings.lastBackupAt ? `Last backup ${formatRelative(settings.lastBackupAt)}. ` : ''}
+              {storage.usage !== undefined
+                ? `Using ${formatBytes(storage.usage)}${storage.quota ? ` of ${formatBytes(storage.quota)} available` : ''}.`
+                : 'One JSON file with every space, folder and document.'}
+            </>
+          }
         >
           <div className="flex gap-2">
-            <Button size="sm" icon={<Download size={14} />} onClick={() => void doExport()}>
-              Export
-            </Button>
+            {IS_PREVIEW ? (
+              <Button
+                size="sm"
+                icon={<ClipboardCopy size={14} />}
+                disabled={!previewJson}
+                onClick={() => {
+                  void copyToClipboard(previewJson, 'Backup copied — paste it into a .json file to keep it').then((ok) => setShowJson(!ok));
+                }}
+              >
+                Copy backup
+              </Button>
+            ) : (
+              <Button size="sm" icon={<Download size={14} />} onClick={() => void doExport()}>
+                Export
+              </Button>
+            )}
             <Button size="sm" icon={<Upload size={14} />} onClick={() => fileInput.current?.click()}>
               Restore…
             </Button>
             <input
               ref={fileInput}
+              id="settings-restore"
               type="file"
               accept="application/json,.json"
               hidden
@@ -207,35 +253,146 @@ export function SettingsDialog() {
             />
           </div>
         </Row>
-        <Row
-          title="Protect from cleanup"
-          hint={
-            storage.persisted
-              ? 'The browser has agreed not to clear this data when space runs low.'
-              : 'Browsers may clear site data when the disk is nearly full. Ask this one to keep it.'
-          }
-        >
-          {storage.persisted ? (
-            <span className="flex items-center gap-1.5 text-[12.5px] text-[var(--st-posted)]">
-              <ShieldCheck size={15} /> Protected
-            </span>
-          ) : (
-            <Button size="sm" icon={<HardDrive size={14} />} onClick={() => void requestPersist()}>
-              Request
-            </Button>
-          )}
-        </Row>
+        {showJson && (
+          <textarea
+            id="settings-backup-json"
+            readOnly
+            value={previewJson}
+            aria-label="Backup data"
+            className="field mb-2 h-32! font-mono text-[11px]"
+            onFocus={(e) => e.currentTarget.select()}
+            ref={(el) => el?.select()}
+          />
+        )}
+        {!IS_PREVIEW && (
+          <Row
+            title="Protect from cleanup"
+            hint={
+              storage.persisted
+                ? 'The browser has agreed not to clear this data when space runs low.'
+                : 'Browsers may clear site data when the disk is nearly full. Ask this one to keep it.'
+            }
+          >
+            {storage.persisted ? (
+              <span className="flex items-center gap-1.5 text-[12.5px] text-[var(--st-posted)]">
+                <ShieldCheck size={15} /> Protected
+              </span>
+            ) : (
+              <Button size="sm" icon={<HardDrive size={14} />} onClick={() => void requestPersist()}>
+                Request
+              </Button>
+            )}
+          </Row>
+        )}
         <Row title="Erase everything" hint="Deletes all spaces, folders and documents from this browser.">
           <Button size="sm" variant="ghost" className="text-danger! hover:bg-danger/10!" onClick={() => void doErase()}>
             Delete all data
           </Button>
         </Row>
 
-        <div className="mt-6 flex items-center gap-3 border-t border-line pt-5 text-[12px] text-fg-4">
+        {profileAndWriting}
+
+        <div className="mt-5 flex items-center gap-3 text-[12px] text-fg-4">
           <Mark className="h-3.5 w-auto text-fg-3" />
           <span>Infin8 Content OS · v0.1.0</span>
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** Folder backups: off → choose folder; on → back up now / change / turn off. */
+function AutoBackupRow() {
+  const status = useBackup((st) => st.status);
+  const folderName = useBackup((st) => st.folderName);
+  const error = useBackup((st) => st.error);
+  const busy = useBackup((st) => st.busy);
+  const lastBackupAt = useSettings((st) => st.lastBackupAt);
+  const last = lastBackupAt ? ` Last backup ${formatRelative(lastBackupAt)}.` : '';
+  const title = 'Automatic backup';
+
+  const choose = async () => {
+    if (await chooseBackupFolder()) toast('Automatic backup is on — a copy is in your folder now', { tone: 'success' });
+  };
+
+  if (status === 'unsupported') {
+    return (
+      <Row title={title} hint="Needs Chrome, Edge, Brave or Arc on a computer. Until then, export a backup file after you post.">
+        <span className="text-[12px] text-fg-4">Not available in this browser</span>
+      </Row>
+    );
+  }
+  if (status === 'off') {
+    return (
+      <Row
+        title={title}
+        hint={
+          <>
+            Saves everything to a folder on this laptop shortly after each change, plus one dated copy per day (the last 30 are kept).{' '}
+            <span className="text-fg-2">Choose a folder inside Google Drive, Dropbox or iCloud Drive</span> to also keep a copy off this laptop.
+          </>
+        }
+      >
+        <Button size="sm" variant="primary" icon={<FolderOpen size={14} />} onClick={() => void choose()}>
+          Choose folder…
+        </Button>
+      </Row>
+    );
+  }
+  if (status === 'needs-permission') {
+    return (
+      <Row title={title} hint={`The browser needs your OK to keep saving to “${folderName}”.${last}`}>
+        <div className="flex gap-2">
+          <Button size="sm" variant="primary" onClick={() => void reconnectBackupFolder()}>
+            Reconnect
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => void turnOffAutoBackup()}>
+            Turn off
+          </Button>
+        </div>
+      </Row>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <Row title={title} hint={<span className="text-danger">{error}</span>}>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => void backupNow()}>
+            Try again
+          </Button>
+          <Button size="sm" variant="ghost" icon={<FolderOpen size={14} />} onClick={() => void choose()}>
+            Choose folder…
+          </Button>
+        </div>
+      </Row>
+    );
+  }
+  return (
+    <Row
+      title={title}
+      hint={
+        <>
+          On — saving to <span className="text-fg-2">“{folderName}”</span>.{last}
+        </>
+      }
+    >
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={async () => {
+            if (await backupNow()) toast('Backed up', { tone: 'success' });
+          }}
+        >
+          {busy ? 'Backing up…' : 'Back up now'}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void choose()}>
+          Change…
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void turnOffAutoBackup()}>
+          Turn off
+        </Button>
+      </div>
+    </Row>
   );
 }

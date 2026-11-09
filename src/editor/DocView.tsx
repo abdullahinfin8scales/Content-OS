@@ -25,13 +25,14 @@ import { Button, cx, IconButton } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { countChars, countWords, emptyDoc, formatDuration, spokenSeconds, toMarkdown, toPlainText } from '../lib/content';
 import { formatDate, formatTime } from '../lib/dates';
+import { IS_PREVIEW } from '../lib/env';
 import { SAVE_EVENT } from '../lib/events';
 import { navigate, paths } from '../lib/router';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { folderChain } from '../lib/tree';
 import type { Doc, ID, RichNode } from '../lib/types';
 import { copyToClipboard, downloadFile, duplicateDoc, rememberLocation, safeFileName, trashItem } from '../state/actions';
-import { openMenu, toast } from '../state/feedback';
+import { openMenu, toast, type MenuItem } from '../state/feedback';
 import { repo } from '../state/repo';
 import { useSettings } from '../state/settings';
 import { useUI } from '../state/ui';
@@ -258,25 +259,32 @@ function DocEditor({ doc, ws, initial }: { doc: Doc; ws: Workspace; initial: Ric
 
   const plainText = () => (editor ? toPlainText(editor.getJSON()) : '');
 
-  const moreMenu = () => [
+  // Downloads and printing are blocked inside the claude.ai preview frame.
+  const fileItems: MenuItem[] = IS_PREVIEW
+    ? []
+    : [
+        { type: 'separator' },
+        {
+          label: 'Download .md',
+          icon: <FileDown size={15} />,
+          onSelect: () => downloadFile(`${safeFileName(doc.title)}.md`, toMarkdown(editor?.getJSON(), doc), 'text/markdown;charset=utf-8'),
+        },
+        {
+          label: 'Download .txt',
+          icon: <FileDown size={15} />,
+          onSelect: () => downloadFile(`${safeFileName(doc.title)}.txt`, (doc.title ? doc.title + '\n\n' : '') + plainText() + '\n'),
+        },
+        { label: 'Print / Save as PDF', icon: <Printer size={15} />, onSelect: () => window.print() },
+      ];
+
+  const moreMenu = (): MenuItem[] => [
     { label: 'Copy as plain text', icon: <ClipboardCopy size={15} />, onSelect: () => void copyToClipboard(plainText(), 'Copied as plain text — ready to paste') },
     {
       label: 'Copy as Markdown',
       icon: <FileText size={15} />,
       onSelect: () => void copyToClipboard(toMarkdown(editor?.getJSON()), 'Copied as Markdown'),
     },
-    { type: 'separator' as const },
-    {
-      label: 'Download .md',
-      icon: <FileDown size={15} />,
-      onSelect: () => downloadFile(`${safeFileName(doc.title)}.md`, toMarkdown(editor?.getJSON(), doc), 'text/markdown;charset=utf-8'),
-    },
-    {
-      label: 'Download .txt',
-      icon: <FileDown size={15} />,
-      onSelect: () => downloadFile(`${safeFileName(doc.title)}.txt`, (doc.title ? doc.title + '\n\n' : '') + plainText() + '\n'),
-    },
-    { label: 'Print / Save as PDF', icon: <Printer size={15} />, onSelect: () => window.print() },
+    ...fileItems,
     { type: 'separator' as const },
     {
       label: doc.pinned ? 'Unpin from Home' : 'Pin to Home',

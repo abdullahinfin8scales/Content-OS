@@ -2,7 +2,7 @@
 
 A private writing and archive space for social media content, styled in the infin8scale identity. Write scripts and posts in a Google-Docs-style editor, organise them into **spaces → folders → documents**, track each piece from idea to posted, and keep an archive of everything you publish with its link and numbers.
 
-Everything is stored **locally in your browser**. There is no server, no account and no upload.
+Everything is stored **locally in your browser** on your laptop. There is no server, no account and no upload — and automatic backups to a folder you choose keep a copy outside the browser.
 
 ## Features
 
@@ -32,6 +32,12 @@ Everything is stored **locally in your browser**. There is no server, no account
 - Dark-first monochrome UI built from the infin8scale mark and wordmark. Both are vectorised from the original PNGs (`src/brand/assets`) so they stay crisp and themeable.
 - Light and system themes. Works on mobile.
 
+**Keeping posts safe**
+- **Automatic backup** to a folder you pick (Chrome, Edge, Brave or Arc on a computer): a full copy shortly after each change, plus one dated snapshot per day — the last 30 are kept. Pick a folder inside Google Drive, Dropbox or iCloud Drive and you also have a copy off the laptop.
+- The sidebar always shows when the last backup happened; Home reminds you if there has been none for a week.
+- A backup is never replaced by an empty one, so “Delete all data” can't wipe your safety copy.
+- Manual **Export / Restore** of a single JSON file works in every browser.
+
 ## Run it
 
 Requires Node 20+.
@@ -47,20 +53,34 @@ npm run dev
 Then open http://localhost:5173.
 
 ```bash
-npm test          # unit tests (data layer, text conversion, backups)
-npm run build     # type-check + production build into dist/
-npm run preview   # serve the production build
+npm test               # unit tests (data layer, text conversion, backups)
+npm run build          # type-check + production build into dist/
+npm run preview        # serve the production build on http://localhost:4173
+npm run build:preview  # single-file build for a claude.ai preview page
 ```
 
 ## Your data
 
-- Stored in this browser's IndexedDB. It never leaves the device, and it is **not synced** between browsers or devices.
-- Clearing site data, or using a private window, deletes it. **Settings → Export** writes a single JSON backup and **Restore** brings one back. Back up regularly.
+- Stored in this browser's IndexedDB. It never leaves the laptop, and it is **not synced** between browsers or devices.
+- **Data belongs to the exact address you open.** `http://localhost:5173`, `http://localhost:4173` and a hosted URL are three separate, empty workspaces. Always use the same one (the scripts refuse to start on another port for this reason). To move, export a backup and restore it at the new address.
+- Clearing site data, or using a private window, deletes it — which is what automatic backup is for. Turn it on in **Settings → Backups & data**.
 - On first run the app asks the browser to protect its storage from automatic eviction. Firefox prompts for this, so there it is a button in Settings.
+
+## Using it every day
+
+The most reliable setup on a laptop: deploy once, then install it as an app.
+
+1. Host the `dist/` build (for example Vercel or Netlify, connected to this repository — every push redeploys).
+2. Open the URL in Chrome or Edge and use **Install app** in the address bar, so it opens in its own window like a desktop app.
+3. In **Settings → Backups & data**, choose a backup folder inside Google Drive, Dropbox or iCloud Drive.
+
+Running it locally with `npm run build` then `npm run preview` also works, but needs a terminal each time.
 
 ## Deploy
 
-The build is a static site with hash routing. Host `dist/` anywhere (Netlify, Vercel, GitHub Pages, any static server) with no rewrites needed. Every visitor gets their own empty, private workspace in their own browser.
+The build is a static site with hash routing (`#library`, `#doc-<id>`). Host `dist/` anywhere (Netlify, Vercel, GitHub Pages, any static server) with no rewrites needed. Every visitor gets their own empty, private workspace in their own browser.
+
+`npm run build:preview` packs the app into one self-contained HTML file for a claude.ai preview page. Inside that sandbox, downloads, printing and folder backups are unavailable, so the preview swaps Export for “Copy backup” and labels itself as a preview.
 
 ## Shortcuts
 
@@ -91,7 +111,7 @@ Every write goes through `src/lib/repo.ts`, which owns the rules: cascading tras
 
 ## Known limits / next steps
 
-- Single device: syncing needs a backend (e.g. Supabase or a small API) behind the same repository interface.
+- Single device by design: syncing would need a backend (e.g. Supabase or a small API) behind the same repository interface.
 - No automatic import from Instagram, TikTok, YouTube or the others. Their APIs are restricted, so posts are logged manually or pasted in.
 - No version history yet.
 - Folders sort alphabetically, so prefix names (`01 Ideas`) to force an order.

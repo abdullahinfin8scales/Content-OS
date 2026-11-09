@@ -1,15 +1,14 @@
 @import 'tailwindcss';
 
-@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
-
 /* ------------------------------------------------------------------ */
 /* Brand tokens                                                        */
 /* The infin8scale identity is monochrome: white on near-black. Color  */
 /* is reserved for meaning (status, platform, space).                  */
 /* ------------------------------------------------------------------ */
 
-:root,
-[data-theme='dark'] {
+/* Dark-first: dark values on bare :root; light when the OS prefers it (unless
+   dark was chosen explicitly) or when light is chosen. */
+:root {
   color-scheme: dark;
   --frame: #07080a;
   --canvas: #0b0c0f;
@@ -50,7 +49,50 @@
   --sp-rose: #fb7185;
 }
 
-[data-theme='light'] {
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --frame: #f3f3f1;
+    --canvas: #fafaf9;
+    --raised: #ffffff;
+    --overlay: #ffffff;
+    --sunken: #efefec;
+    --hover: rgb(10 11 14 / 0.045);
+    --active: rgb(10 11 14 / 0.08);
+    --line: rgb(10 11 14 / 0.08);
+    --line-strong: rgb(10 11 14 / 0.14);
+    --fg: #0b0c0f;
+    --fg-2: #4a4f5b;
+    --fg-3: #7b808b;
+    --fg-4: #aeb2b9;
+    --brand: #0b0c0f;
+    --brand-fg: #ffffff;
+    --danger: #dc2626;
+    --ring: rgb(10 11 14 / 0.4);
+    --selection: rgb(10 11 14 / 0.12);
+    --highlight: rgb(250 204 21 / 0.4);
+    --glow: rgb(10 11 14 / 0.04);
+    --shadow-pop: 0 18px 50px -14px rgb(10 11 14 / 0.25), 0 0 0 1px rgb(10 11 14 / 0.08);
+    --shadow-card: 0 1px 2px 0 rgb(10 11 14 / 0.04), 0 8px 24px -18px rgb(10 11 14 / 0.25);
+
+    --st-idea: #7656d6;
+    --st-drafting: #b26f12;
+    --st-ready: #0b8aa0;
+    --st-scheduled: #3565dc;
+    --st-posted: #198c4b;
+
+    --sp-white: #3b3f48;
+    --sp-violet: #7c3aed;
+    --sp-blue: #2563eb;
+    --sp-cyan: #0891b2;
+    --sp-green: #16a34a;
+    --sp-amber: #d97706;
+    --sp-orange: #ea580c;
+    --sp-rose: #e11d48;
+  }
+}
+
+:root[data-theme='light'] {
   color-scheme: light;
   --frame: #f3f3f1;
   --canvas: #fafaf9;
@@ -205,10 +247,6 @@
   input[type='time']::-webkit-calendar-picker-indicator {
     opacity: 0.55;
     cursor: pointer;
-  }
-  [data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator,
-  [data-theme='dark'] input[type='time']::-webkit-calendar-picker-indicator {
-    filter: invert(1);
   }
 }
 

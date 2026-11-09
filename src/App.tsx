@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { Mark } from './brand/Logo';
 import { CommandPalette } from './components/dialogs/CommandPalette';
 import { MoveDialog } from './components/dialogs/MoveDialog';
@@ -10,9 +10,11 @@ import { TopBar } from './components/TopBar';
 import { Button, cx } from './components/ui/Button';
 import { EmptyState } from './components/ui/EmptyState';
 import { ConfirmHost, MenuHost, ToastHost, TooltipHost } from './components/ui/Hosts';
+import { IS_PREVIEW } from './lib/env';
 import { SAVE_EVENT } from './lib/events';
-import { navigate, paths, useRoute, type Route } from './lib/router';
+import { navigate, parseHash, paths, useRoute, type Route } from './lib/router';
 import { openNewDocDialog } from './state/actions';
+import { initAutoBackup, notifyContentChanged } from './state/backup';
 import { useConfirm, useMenu } from './state/feedback';
 import { resolveTheme, useSettings } from './state/settings';
 import { useUI } from './state/ui';
@@ -26,12 +28,26 @@ import { TrashView } from './views/TrashView';
 // The editor (ProseMirror + TipTap) is most of the bundle; load it on demand.
 const DocView = lazy(() => import('./editor/DocView'));
 
+/**
+ * Explicit Dark/Light set `data-theme`; "system" leaves it to the OS (CSS media
+ * query) — or to the host page, which may set `data-theme` itself in the preview.
+ * `data-theme-owner` marks values this app wrote, so it never clears the host's.
+ */
 function useTheme() {
   const pref = useSettings((s) => s.theme);
   useEffect(() => {
+    const root = document.documentElement;
     const apply = () => {
+      if (pref === 'system') {
+        if (root.dataset.themeOwner === 'app') {
+          delete root.dataset.theme;
+          delete root.dataset.themeOwner;
+        }
+      } else {
+        root.dataset.theme = pref;
+        root.dataset.themeOwner = 'app';
+      }
       const theme = resolveTheme(pref);
-      document.documentElement.dataset.theme = theme;
       document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#07080a' : '#f3f3f1');
     };
     apply();
@@ -68,7 +84,7 @@ function useShortcuts() {
         if (window.matchMedia('(min-width: 1024px)').matches) ui.set({ sidebarHidden: !ui.sidebarHidden });
         else ui.set({ sidebarOpen: !ui.sidebarOpen });
       } else if (mod && e.shiftKey && key === 'f') {
-        if (window.location.hash.startsWith('#/doc/')) {
+        if (parseHash(window.location.hash).name === 'doc') {
           e.preventDefault();
           ui.set({ focusMode: !ui.focusMode });
         }
@@ -88,7 +104,7 @@ function useShortcuts() {
  *  Firefox would show a prompt, so there it is left to Settings. */
 function usePersistentStorage() {
   useEffect(() => {
-    if (/firefox/i.test(navigator.userAgent)) return;
+    if (IS_PREVIEW || /firefox/i.test(navigator.userAgent)) return;
     void navigator.storage?.persisted?.().then((p) => {
       if (!p) void navigator.storage.persist?.();
     });
@@ -97,7 +113,7 @@ function usePersistentStorage() {
 
 function Splash() {
   return (
-    <div className="flex h-dvh items-center justify-center bg-frame">
+    <div className="flex h-full items-center justify-center bg-frame">
       <Mark className="h-8 w-auto animate-pulse text-fg" title="Loading" />
     </div>
   );
@@ -115,7 +131,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
     if (!this.state.error) return this.props.children;
     const storage = /indexeddb|database|quota|dexie/i.test(String(this.state.error?.message ?? '') + String(this.state.error?.name ?? ''));
     return (
-      <div className="flex h-dvh items-center justify-center bg-frame px-6">
+      <div className="flex h-full items-center justify-center bg-frame px-6">
         <div className="max-w-md text-center">
           <Mark className="mx-auto mb-6 h-8 w-auto text-fg" />
           <h1 className="text-[18px] font-semibold text-fg">{storage ? 'Local storage is unavailable' : 'Something went wrong'}</h1>
@@ -177,13 +193,30 @@ function RouteView({ route }: { route: Route }) {
   );
 }
 
+/** Restores the backup folder and reports every content change to it. */
+function useAutoBackup() {
+  const ws = useWorkspace();
+  const first = useRef(true);
+  useEffect(() => {
+    void initAutoBackup();
+  }, []);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    notifyContentChanged();
+  }, [ws]);
+}
+
 function Shell() {
+  useAutoBackup();
   const route = useRoute();
   const focusMode = useUI((s) => s.focusMode);
   const sidebarHidden = useUI((s) => s.sidebarHidden);
   const showSidebar = !focusMode;
   return (
-    <div className="flex h-dvh overflow-hidden bg-frame print:block print:h-auto print:overflow-visible">
+    <div className="flex h-full overflow-hidden bg-frame print:block print:h-auto print:overflow-visible">
       {showSidebar && <Sidebar />}
       <main
         className={cx(

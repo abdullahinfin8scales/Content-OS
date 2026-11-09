@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -15,8 +15,10 @@
           var raw = localStorage.getItem('infin8.settings');
           var saved = raw ? JSON.parse(raw) : null;
           var pref = (saved && saved.state && saved.state.theme) || 'dark';
-          var dark = pref === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : pref !== 'light';
-          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          if (pref === 'dark' || pref === 'light') {
+            document.documentElement.dataset.theme = pref;
+            document.documentElement.dataset.themeOwner = 'app';
+          }
         } catch (e) {}
       })();
     </script>

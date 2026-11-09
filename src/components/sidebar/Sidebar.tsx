@@ -20,6 +20,7 @@ import { useEffect, useMemo } from 'react';
 import { Wordmark } from '../../brand/Logo';
 import type { DragItem } from '../../lib/dnd';
 import { navigate, paths, useRoute, type Route } from '../../lib/router';
+import { IS_PREVIEW } from '../../lib/env';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { canNestFolder, containerKey } from '../../lib/tree';
 import type { Doc, Folder, ID, Space } from '../../lib/types';
@@ -29,6 +30,7 @@ import { repo } from '../../state/repo';
 import { resolveTheme, useSettings } from '../../state/settings';
 import { isExpanded, useUI } from '../../state/ui';
 import { useWorkspace, type Workspace } from '../../state/workspace';
+import { BackupStatus } from '../BackupStatus';
 import { docMenu, folderMenu, newItemsMenu, spaceMenu } from '../itemMenus';
 import { SpaceGlyph, StatusDot } from '../ui/Badges';
 import { cx, IconButton } from '../ui/Button';
@@ -170,10 +172,18 @@ export function Sidebar() {
               {resolved === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
             </IconButton>
           </div>
-          <div className="mt-2 flex items-center gap-1.5 px-2.5 text-[11px] text-fg-4" data-tip="Your content is stored in this browser only">
-            <Lock size={11} />
-            Private · stored on this device
-          </div>
+          {IS_PREVIEW ? (
+            <button
+              onClick={() => set({ settingsOpen: true })}
+              className="mt-2 flex items-center gap-1.5 px-2.5 text-left text-[11px] text-[var(--st-drafting)]"
+              data-tip="Preview on claude.ai — open Settings for details"
+            >
+              <Lock size={11} />
+              Preview · for trying it out
+            </button>
+          ) : (
+            <BackupStatus />
+          )}
         </div>
       </aside>
     </>

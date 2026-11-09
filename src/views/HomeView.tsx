@@ -1,17 +1,19 @@
-import { ArrowRight, House, LayoutGrid, Pin } from 'lucide-react';
+import { ArrowRight, House, LayoutGrid, Pin, ShieldAlert } from 'lucide-react';
 import { useMemo } from 'react';
 import { Mark } from '../brand/Logo';
 import { DocCard } from '../components/docs/DocItems';
 import { TEMPLATE_ICONS } from '../components/icons';
 import { TopBar } from '../components/TopBar';
 import { PlatformStack, StatusDot } from '../components/ui/Badges';
-import { cx } from '../components/ui/Button';
+import { Button, cx } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { addDays, formatDueLabel, formatLongDate, formatTime, greeting, parseISODate, toISODate, todayISO, weekStartsOn } from '../lib/dates';
+import { IS_PREVIEW } from '../lib/env';
 import { paths } from '../lib/router';
 import { getTemplate } from '../lib/templates';
 import type { Doc, Status } from '../lib/types';
 import { createDocFromTemplate, defaultLocation, openNewDocDialog } from '../state/actions';
+import { useBackup } from '../state/backup';
 import { useSettings } from '../state/settings';
 import { useUI } from '../state/ui';
 import { useWorkspace, type Workspace } from '../state/workspace';
@@ -75,6 +77,8 @@ export function HomeView() {
               {subtitle.length ? subtitle.join(' · ') : 'A clean slate. What are you making today?'}
             </p>
           </section>
+
+          <BackupNudge docCount={ws.docs.length} />
 
           {/* Quick create */}
           <section className="mb-10">
@@ -292,3 +296,46 @@ function Activity({ ws }: { ws: Workspace }) {
   );
 }
 
+
+const DAY = 86_400_000;
+
+/** Shown when posts exist but nothing has been backed up for a week. */
+function BackupNudge({ docCount }: { docCount: number }) {
+  const status = useBackup((st) => st.status);
+  const lastBackupAt = useSettings((st) => st.lastBackupAt);
+  const dismissedAt = useSettings((st) => st.backupNudgeDismissedAt);
+  const set = useSettings((st) => st.set);
+  const now = Date.now();
+  const due =
+    !IS_PREVIEW &&
+    status !== 'active' &&
+    docCount >= 3 &&
+    (!lastBackupAt || now - lastBackupAt > 7 * DAY) &&
+    (!dismissedAt || now - dismissedAt > 3 * DAY);
+  if (!due) return null;
+  return (
+    <section
+      className="mb-10 flex flex-col gap-4 rounded-2xl border p-4 sm:flex-row sm:items-center"
+      style={{
+        borderColor: 'color-mix(in oklab, var(--st-drafting) 35%, transparent)',
+        background: 'color-mix(in oklab, var(--st-drafting) 7%, var(--raised))',
+      }}
+    >
+      <ShieldAlert size={20} className="shrink-0 text-[var(--st-drafting)]" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] font-semibold text-fg">{lastBackupAt ? 'Your last backup is over a week old' : 'Your posts aren’t backed up yet'}</div>
+        <p className="mt-0.5 text-[13px] leading-relaxed text-fg-3">
+          They live only in this browser. Turn on automatic backup so clearing your browser, or losing this laptop, can’t take them with it.
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <Button variant="ghost" size="sm" onClick={() => set({ backupNudgeDismissedAt: Date.now() })}>
+          Not now
+        </Button>
+        <Button variant="primary" size="sm" onClick={() => useUI.getState().set({ settingsOpen: true })}>
+          Set up backup
+        </Button>
+      </div>
+    </section>
+  );
+}

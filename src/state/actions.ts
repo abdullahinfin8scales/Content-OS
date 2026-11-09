@@ -181,24 +181,38 @@ function isInside(ws: Workspace, folderId: ID | null, ancestorId: ID): boolean {
 
 /* --------------------------- Clipboard/files ------------------------ */
 
-export async function copyToClipboard(text: string, label = 'Copied to clipboard') {
+function legacyCopy(text: string): boolean {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  area.remove();
+  return ok;
+}
+
+export async function copyToClipboard(text: string, label = 'Copied to clipboard'): Promise<boolean> {
+  let ok = false;
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
-    } else {
-      const area = document.createElement('textarea');
-      area.value = text;
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.body.appendChild(area);
-      area.select();
-      document.execCommand('copy');
-      area.remove();
+      ok = true;
     }
-    toast(label, { tone: 'success' });
   } catch {
-    toast('Couldn’t access the clipboard', { tone: 'error' });
+    ok = false;
   }
+  if (!ok) ok = legacyCopy(text);
+  if (ok) toast(label, { tone: 'success' });
+  else toast('Your browser blocked the clipboard here — select the text and press Ctrl+C instead.', { tone: 'error' });
+  return ok;
 }
 
 export function downloadFile(filename: string, content: string | Blob, type = 'text/plain;charset=utf-8') {
