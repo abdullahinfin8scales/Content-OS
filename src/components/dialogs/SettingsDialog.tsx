@@ -1,9 +1,10 @@
-import { ClipboardCopy, Download, FolderOpen, HardDrive, Lock, Plus, ShieldCheck, Upload, X } from 'lucide-react';
+import { ClipboardCopy, Download, FolderOpen, HardDrive, Lock, Pencil, Plus, ShieldCheck, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Mark } from '../../brand/Logo';
 import { backupFileName, BackupError, clearAll, exportBackup, parseBackup, restoreBackup } from '../../lib/backup';
 import { IS_PREVIEW } from '../../lib/env';
 import { formatRelative } from '../../lib/dates';
+import type { PlatformInfo } from '../../lib/platforms';
 import { navigate, paths } from '../../lib/router';
 import type { DocFont } from '../../lib/types';
 import { copyToClipboard, downloadFile } from '../../state/actions';
@@ -432,28 +433,93 @@ function PlatformsSection() {
       {custom.length > 0 && (
         <div className="mb-2 overflow-hidden rounded-xl border border-line">
           {custom.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-sunken text-fg">
-                <PlatformGlyph icon={p.icon} name={p.name} size={16} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-fg">{p.name}</span>
-                <span className="block truncate text-[11.5px] text-fg-4">
-                  {[p.domain, p.limit ? `${p.limit.toLocaleString()} characters` : null].filter(Boolean).join(' · ') || 'No link'}
-                </span>
-              </span>
-              <button
-                aria-label={`Remove ${p.name}`}
-                data-tip="Remove"
-                onClick={() => void remove(p.id, p.name)}
-                className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-hover hover:text-danger"
-              >
-                <X size={14} />
-              </button>
-            </div>
+            <PlatformRow key={p.id} platform={p} onRemove={() => void remove(p.id, p.name)} />
           ))}
         </div>
       )}
     </>
+  );
+}
+
+/** One custom platform: name and limit can be corrected without taking it off posts. */
+function PlatformRow({ platform: p, onRemove }: { platform: PlatformInfo; onRemove: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState('');
+  const [limit, setLimit] = useState('');
+
+  const start = () => {
+    setName(p.name);
+    setLimit(p.limit ? String(p.limit) : '');
+    setEditing(true);
+  };
+  const save = async () => {
+    await repo.updatePlatform(p.id, { name, limit: limit ? Number(limit) : null });
+    setEditing(false);
+    toast('Platform updated');
+  };
+
+  return (
+    <div className="flex items-center gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-sunken text-fg">
+        <PlatformGlyph icon={p.icon} name={editing ? name : p.name} size={16} />
+      </span>
+      {editing ? (
+        <form
+          className="flex min-w-0 flex-1 items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={40}
+            aria-label="Platform name"
+            className="field h-8! min-w-0 flex-1 text-[13px]"
+            autoFocus
+          />
+          <input
+            value={limit}
+            onChange={(e) => setLimit(e.target.value.replace(/[^\d]/g, ''))}
+            inputMode="numeric"
+            placeholder="No limit"
+            aria-label="Character limit"
+            className="field h-8! w-[96px] text-[13px] tabular-nums"
+          />
+          <Button size="sm" variant="primary" type="submit">
+            Save
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+        </form>
+      ) : (
+        <>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium text-fg">{p.name}</span>
+            <span className="block truncate text-[11.5px] text-fg-4">
+              {[p.domain, p.limit ? `${p.limit.toLocaleString()} characters` : 'no character limit'].filter(Boolean).join(' · ')}
+            </span>
+          </span>
+          <button
+            aria-label={`Edit ${p.name}`}
+            data-tip="Edit name and limit"
+            onClick={start}
+            className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-hover hover:text-fg"
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            aria-label={`Remove ${p.name}`}
+            data-tip="Remove"
+            onClick={onRemove}
+            className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-hover hover:text-danger"
+          >
+            <X size={14} />
+          </button>
+        </>
+      )}
+    </div>
   );
 }
