@@ -109,6 +109,9 @@ src/
   editor/       document page, toolbar, details panel, teleprompter
   views/        home, library/space/folder, pipeline, calendar, trash
 tests/          Vitest suites for the data layer
+docs/mistakes/          mistakes made while building, each turned into a rule
+docs/removed-features/  features taken out, and why
+CLAUDE.md       instructions every Claude Code session loads, including both logs above
 ```
 
 Every write goes through `src/lib/repo.ts`, which owns the rules: cascading trash, no folder cycles, and moves across spaces that carry nested content along.
