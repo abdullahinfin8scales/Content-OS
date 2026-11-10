@@ -5,8 +5,9 @@ import { PlatformIcon, StatusDot } from '../components/ui/Badges';
 import { Button, cx, IconButton } from '../components/ui/Button';
 import { formatDuration, spokenSeconds } from '../lib/content';
 import { formatRelative, todayISO } from '../lib/dates';
-import { METRIC_LABELS, PLATFORM_META, STATUS_META } from '../lib/meta';
-import { METRIC_KEYS, PLATFORMS, STATUSES, type Doc, type DocFont, type DocPatch, type MetricKey } from '../lib/types';
+import { METRIC_LABELS, STATUS_META } from '../lib/meta';
+import { platformInfo } from '../lib/platforms';
+import { METRIC_KEYS, STATUSES, type Doc, type DocFont, type DocPatch, type MetricKey } from '../lib/types';
 import { openMenu } from '../state/feedback';
 import { repo } from '../state/repo';
 import { useSettings } from '../state/settings';
@@ -61,6 +62,8 @@ export function DetailsPanel({ doc, ws, stats, onClose }: { doc: Doc; ws: Worksp
   const isContent = doc.kind === 'content';
   const hasSelection = stats.selChars > 0;
   const chars = hasSelection ? stats.selChars : stats.chars;
+  // Length meters for the selected platforms that have a known limit.
+  const limited = doc.platforms.map((p) => platformInfo(ws.platforms, p)).filter((p) => p.limit !== null);
 
   return (
     <aside
@@ -116,23 +119,32 @@ export function DetailsPanel({ doc, ws, stats, onClose }: { doc: Doc; ws: Worksp
 
             <Section label="Platforms">
               <div className="grid grid-cols-7 gap-1.5">
-                {PLATFORMS.map((p) => {
-                  const on = doc.platforms.includes(p);
+                {ws.platforms.list.map(({ id, name }) => {
+                  const on = doc.platforms.includes(id);
                   return (
                     <button
-                      key={p}
+                      key={id}
                       aria-pressed={on}
-                      data-tip={PLATFORM_META[p].name}
-                      onClick={() => update({ platforms: on ? doc.platforms.filter((x) => x !== p) : [...doc.platforms, p] })}
+                      aria-label={name}
+                      data-tip={name}
+                      onClick={() => update({ platforms: on ? doc.platforms.filter((x) => x !== id) : [...doc.platforms, id] })}
                       className={cx(
                         'flex aspect-square items-center justify-center rounded-[10px] border transition-all',
                         on ? 'border-fg-3 bg-active text-fg' : 'border-line text-fg-4 hover:border-line-strong hover:text-fg-2',
                       )}
                     >
-                      <PlatformIcon platform={p} size={15} />
+                      <PlatformIcon platform={id} size={15} />
                     </button>
                   );
                 })}
+                <button
+                  aria-label="Add a platform"
+                  data-tip="Add a platform"
+                  onClick={() => useUI.getState().set({ addPlatform: { docId: doc.id } })}
+                  className="flex aspect-square items-center justify-center rounded-[10px] border border-dashed border-line-strong text-fg-4 transition-colors hover:border-fg-3 hover:text-fg"
+                >
+                  <Plus size={15} />
+                </button>
               </div>
             </Section>
 
@@ -186,11 +198,12 @@ export function DetailsPanel({ doc, ws, stats, onClose }: { doc: Doc; ws: Worksp
             <Stat value={chars.toLocaleString()} label="Characters" />
             <Stat value={formatDuration(spokenSeconds(hasSelection ? stats.selWords : stats.words, wpm))} label="Spoken" />
           </div>
-          {isContent && doc.platforms.length > 0 && (
+          {isContent && limited.length > 0 && (
             <div className="mt-4 space-y-2.5">
-              {doc.platforms.map((p) => {
-                const meta = PLATFORM_META[p];
-                const ratio = chars / meta.limit;
+              {limited.map((meta) => {
+                const p = meta.id;
+                const limit = meta.limit!;
+                const ratio = chars / limit;
                 const over = ratio > 1;
                 return (
                   <div key={p}>
@@ -200,7 +213,7 @@ export function DetailsPanel({ doc, ws, stats, onClose }: { doc: Doc; ws: Worksp
                         {meta.name} <span className="text-fg-4">{meta.limitLabel}</span>
                       </span>
                       <span className={cx('ml-auto tabular-nums', over ? 'font-semibold text-danger' : 'text-fg-3')}>
-                        {chars.toLocaleString()} / {meta.limit.toLocaleString()}
+                        {chars.toLocaleString()} / {limit.toLocaleString()}
                       </span>
                     </div>
                     <div className="h-1 overflow-hidden rounded-full bg-active">

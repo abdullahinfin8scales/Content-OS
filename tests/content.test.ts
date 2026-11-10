@@ -81,7 +81,7 @@ describe('toMarkdown', () => {
       tags: ['growth'],
     });
     expect(md).toContain('title: "My \\"post\\""');
-    expect(md).toContain('platforms: [instagram, tiktok]');
+    expect(md).toContain('platforms: ["instagram", "tiktok"]');
     expect(md).toContain('publish_date: 2026-11-09 18:30');
     expect(md).toContain('tags: ["growth"]');
     expect(md).toContain('# My "post"\n\nBody');

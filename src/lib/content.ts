@@ -233,13 +233,17 @@ function yamlString(value: string): string {
 }
 
 /** Markdown with YAML front matter — portable to Obsidian and similar tools. */
-export function toMarkdown(doc: RichNode | null | undefined, meta?: Pick<Doc, 'title'> & Partial<Doc>): string {
+export function toMarkdown(
+  doc: RichNode | null | undefined,
+  meta?: Pick<Doc, 'title'> & Partial<Doc>,
+  platformName: (id: string) => string = (id) => id,
+): string {
   const body = doc ? mdBlocks(doc.content ?? []) : '';
   if (!meta) return body + '\n';
   const fm: string[] = ['---', `title: ${yamlString(meta.title || 'Untitled')}`];
   if (meta.kind === 'content') {
     if (meta.status) fm.push(`status: ${meta.status}`);
-    if (meta.platforms?.length) fm.push(`platforms: [${meta.platforms.join(', ')}]`);
+    if (meta.platforms?.length) fm.push(`platforms: [${meta.platforms.map((p) => yamlString(platformName(p))).join(', ')}]`);
     if (meta.publishDate) fm.push(`publish_date: ${meta.publishDate}${meta.publishTime ? ' ' + meta.publishTime : ''}`);
     if (meta.postUrl) fm.push(`url: ${yamlString(meta.postUrl)}`);
   }

@@ -1,15 +1,16 @@
 import { CalendarDays, ChevronDown, Plus, Search, SquareKanban } from 'lucide-react';
 import { useMemo, useState, type DragEvent, type ReactNode } from 'react';
-import { locationLabel } from '../components/docs/DocItems';
+import { locationLabel, ThreadBadge } from '../components/docs/DocItems';
 import { docMenu } from '../components/itemMenus';
 import { TopBar } from '../components/TopBar';
 import { PlatformIcon, PlatformStack, SpaceGlyph, StatusDot } from '../components/ui/Badges';
 import { cx, IconButton } from '../components/ui/Button';
 import { formatDueLabel, formatRelative, todayISO } from '../lib/dates';
 import { draggedItem, endDrag, startDrag } from '../lib/dnd';
-import { PLATFORM_META, STATUS_META } from '../lib/meta';
+import { STATUS_META } from '../lib/meta';
+import { platformInfo } from '../lib/platforms';
 import { paths } from '../lib/router';
-import { PLATFORMS, STATUSES, type Doc, type ID, type Platform, type Status } from '../lib/types';
+import { STATUSES, type Doc, type ID, type Platform, type Status } from '../lib/types';
 import { openNewDocDialog } from '../state/actions';
 import { openMenu } from '../state/feedback';
 import { repo } from '../state/repo';
@@ -79,17 +80,17 @@ export function PipelineView() {
               }
             />
             <Picker
-              label={platform ? PLATFORM_META[platform].name : 'All platforms'}
+              label={platform ? platformInfo(ws.platforms, platform).name : 'All platforms'}
               icon={platform ? <PlatformIcon platform={platform} size={13} /> : undefined}
               onClick={(el) =>
                 openMenu(el, [
                   { label: 'All platforms', checked: !platform, onSelect: () => setPlatform(null) },
                   { type: 'separator' },
-                  ...PLATFORMS.map((p) => ({
-                    label: PLATFORM_META[p].name,
-                    icon: <PlatformIcon platform={p} size={13} />,
-                    checked: platform === p,
-                    onSelect: () => setPlatform(p),
+                  ...ws.platforms.list.map((p) => ({
+                    label: p.name,
+                    icon: <PlatformIcon platform={p.id} size={13} />,
+                    checked: platform === p.id,
+                    onSelect: () => setPlatform(p.id),
                   })),
                 ], { align: 'end' })
               }
@@ -221,7 +222,10 @@ function BoardCard({ doc, ws }: { doc: Doc; ws: Workspace }) {
         dragging && 'opacity-40',
       )}
     >
-      <div className={cx('line-clamp-2 text-[13.5px] leading-snug font-medium', doc.title ? 'text-fg' : 'text-fg-3')}>{doc.title || 'Untitled'}</div>
+      <div className="flex items-start gap-2">
+        <div className={cx('line-clamp-2 min-w-0 flex-1 text-[13.5px] leading-snug font-medium', doc.title ? 'text-fg' : 'text-fg-3')}>{doc.title || 'Untitled'}</div>
+        <ThreadBadge doc={doc} ws={ws} className="mt-0.5" />
+      </div>
       {doc.excerpt && <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-fg-3">{doc.excerpt}</p>}
       <div className="mt-2.5 flex items-center gap-2 text-[11.5px] text-fg-4">
         {space && <SpaceGlyph space={space} size="sm" className="scale-90" />}

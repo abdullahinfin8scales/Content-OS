@@ -1,5 +1,7 @@
-import { PLATFORM_META, SPACE_COLOR_VAR, STATUS_META } from '../../lib/meta';
-import type { Platform, Space, Status } from '../../lib/types';
+import { SPACE_COLOR_VAR, STATUS_META } from '../../lib/meta';
+import { platformInfo } from '../../lib/platforms';
+import type { Platform, PlatformIconData, Space, Status } from '../../lib/types';
+import { useWorkspace } from '../../state/workspace';
 import { spaceIcon } from '../icons';
 import { cx } from './Button';
 
@@ -34,21 +36,46 @@ export function StatusPill({ status, className, size = 'md' }: { status: Status;
   );
 }
 
-export function PlatformIcon({ platform, size = 14, className }: { platform: Platform; size?: number; className?: string }) {
-  const meta = PLATFORM_META[platform];
+/** Draws a platform logo: a brand glyph, or a letter in a rounded square. */
+export function PlatformGlyph({ icon, name, size = 14, className }: { icon: PlatformIconData; name: string; size?: number; className?: string }) {
+  if (icon.kind === 'monogram') {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} className={cx('shrink-0', className)} role="img" aria-label={name}>
+        <rect x="1.75" y="1.75" width="20.5" height="20.5" rx="6" fill="none" stroke="currentColor" strokeWidth="2" />
+        <text x="12" y="16.4" textAnchor="middle" fontSize="12.5" fontWeight="700" fill="currentColor" fontFamily="'Inter Variable', system-ui, sans-serif">
+          {icon.text}
+        </text>
+      </svg>
+    );
+  }
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" fillRule="evenodd" className={cx('shrink-0', className)} role="img" aria-label={meta.name}>
-      <path d={meta.path} />
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="currentColor"
+      fillRule={icon.evenOdd ? 'evenodd' : undefined}
+      className={cx('shrink-0', className)}
+      role="img"
+      aria-label={name}
+    >
+      <path d={icon.path} />
     </svg>
   );
 }
 
+export function PlatformIcon({ platform, size = 14, className }: { platform: Platform; size?: number; className?: string }) {
+  const info = platformInfo(useWorkspace().platforms, platform);
+  return <PlatformGlyph icon={info.icon} name={info.name} size={size} className={className} />;
+}
+
 export function PlatformStack({ platforms, size = 13, max = 4, className }: { platforms: Platform[]; size?: number; max?: number; className?: string }) {
+  const registry = useWorkspace().platforms;
   if (!platforms.length) return null;
   const shown = platforms.slice(0, max);
   const extra = platforms.length - shown.length;
   return (
-    <span className={cx('inline-flex items-center gap-1.5 text-fg-3', className)} data-tip={platforms.map((p) => PLATFORM_META[p].name).join(', ')}>
+    <span className={cx('inline-flex items-center gap-1.5 text-fg-3', className)} data-tip={platforms.map((p) => platformInfo(registry, p).name).join(', ')}>
       {shown.map((p) => (
         <PlatformIcon key={p} platform={p} size={size} />
       ))}

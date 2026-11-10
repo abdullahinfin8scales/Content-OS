@@ -50,3 +50,13 @@ export function canNestFolder(folders: Folder[], folderId: ID, targetParentId: I
   if (targetParentId === folderId) return false;
   return !descendantFolderIds(folders, folderId).has(targetParentId);
 }
+
+/**
+ * Where a new document goes when it starts from `location`: a thread is
+ * swapped for the place the thread sits in. Posts are added to threads on
+ * purpose ("Add post"), never by default.
+ */
+export function outsideThread<L extends { spaceId: ID; folderId: ID | null }>(folderById: Map<ID, Folder>, location: L): L {
+  const folder = location.folderId ? folderById.get(location.folderId) : undefined;
+  return folder?.kind === 'thread' ? { ...location, folderId: folder.parentId } : location;
+}

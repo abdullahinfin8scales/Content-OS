@@ -18,7 +18,9 @@ describe('backup', () => {
     await a.repo.createDoc({ spaceId: home.id, title: 'Notes', kind: 'note' });
     const s = await a.repo.createSpace({ name: 'Client', color: 'violet' });
     const d = await a.repo.createFromTemplate('short-video', { spaceId: s.id });
-    await a.repo.updateDoc(d.id, { title: 'Reel', tags: ['hooks'], metrics: { views: 1200 } });
+    const bsky = await a.repo.createPlatform({ name: 'Bluesky', url: 'https://bsky.app/', domain: 'bsky.app', icon: { kind: 'path', path: 'M0 0h24v24H0z' }, limit: 300 });
+    await a.repo.updateDoc(d.id, { title: 'Reel', tags: ['hooks'], metrics: { views: 1200 }, platforms: ['instagram', bsky.id] });
+    const next = await a.repo.addPostAfter(d.id);
 
     const json = JSON.parse(JSON.stringify(await exportBackup(a.db)));
     const b = await fresh();
@@ -28,6 +30,11 @@ describe('backup', () => {
     expect((await b.db.spaces.toArray()).map((x) => x.name).sort()).toEqual(['Client', 'Personal Brand']);
     const reel = (await b.db.docs.get(d.id))!;
     expect(reel.title).toBe('Reel');
+    expect(reel.platforms).toEqual(['instagram', bsky.id]);
+    expect((await b.db.platforms.get(bsky.id))!.limit).toBe(300);
+    const thread = (await b.db.folders.get(reel.folderId!))!;
+    expect(thread.kind).toBe('thread');
+    expect((await b.db.docs.get(next.id))!.position).toBe(1);
     expect(reel.metrics.views).toBe(1200);
     expect(await b.db.contents.get(d.id)).toBeDefined();
     expect(await b.db.texts.get(d.id)).toBeDefined();

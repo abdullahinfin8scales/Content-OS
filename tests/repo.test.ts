@@ -206,3 +206,91 @@ describe('fresh install', () => {
     expect(await db.docs.count()).toBe(0);
   });
 });
+
+describe('threads', () => {
+  const titles = async (threadId: string) => (await repo.threadPosts(threadId)).map((d) => d.title);
+
+  it('starts a thread where the post is and adds the next post after it', async () => {
+    const s = await repo.createSpace({ name: 'S' });
+    const f = await repo.createFolder({ spaceId: s.id, name: 'Scripts' });
+    const first = await repo.createDoc({ spaceId: s.id, folderId: f.id, title: 'Hook', platforms: ['x'], status: 'scheduled', publishDate: '2026-11-20' });
+    const second = await repo.addPostAfter(first.id);
+    const thread = (await db.folders.get(second.folderId!))!;
+    expect(thread.kind).toBe('thread');
+    expect(thread.parentId).toBe(f.id);
+    expect(thread.name).toBe('Hook');
+    expect(second.platforms).toEqual(['x']);
+    expect(second.status).toBe('scheduled');
+    expect(second.publishDate).toBe('2026-11-20');
+    await repo.updateDoc(second.id, { title: 'Two' });
+    const middle = await repo.addPostAfter(first.id);
+    await repo.updateDoc(middle.id, { title: 'Between' });
+    expect(await titles(thread.id)).toEqual(['Hook', 'Between', 'Two']);
+  });
+
+  it('connects an existing post, reorders, and detaches', async () => {
+    const s1 = await repo.createSpace({ name: 'One' });
+    const s2 = await repo.createSpace({ name: 'Two' });
+    const a = await repo.createDoc({ spaceId: s1.id, title: 'A' });
+    const b = await repo.createDoc({ spaceId: s2.id, title: 'B' });
+    const c = await repo.createDoc({ spaceId: s1.id, title: 'C' });
+    await repo.connectAfter(a.id, c.id);
+    await repo.connectAfter(a.id, b.id);
+    const thread = (await db.docs.get(a.id))!.folderId!;
+    expect(await titles(thread)).toEqual(['A', 'B', 'C']);
+    expect((await db.docs.get(b.id))!.spaceId).toBe(s1.id);
+
+    await repo.movePost(c.id, -1);
+    expect(await titles(thread)).toEqual(['A', 'C', 'B']);
+    await repo.movePost(a.id, -1); // already first: no-op
+    expect(await titles(thread)).toEqual(['A', 'C', 'B']);
+
+    await repo.detachPost(c.id);
+    expect(await titles(thread)).toEqual(['A', 'B']);
+    const detached = (await db.docs.get(c.id))!;
+    expect(detached.folderId).toBeNull();
+    expect(detached.position).toBeUndefined();
+    await expect(repo.connectAfter(a.id, a.id)).rejects.toThrow(/itself/);
+  });
+
+  it('keeps folders out of threads and appends posts moved in', async () => {
+    const s = await repo.createSpace({ name: 'S' });
+    const a = await repo.createDoc({ spaceId: s.id, title: 'A' });
+    const thread = await repo.ensureThread(a.id);
+    expect(await repo.ensureThread(a.id)).toEqual(thread);
+    await expect(repo.createFolder({ spaceId: s.id, parentId: thread.id })).rejects.toThrow(/posts only/);
+    const f = await repo.createFolder({ spaceId: s.id });
+    await expect(repo.moveFolder(f.id, { spaceId: s.id, parentId: thread.id })).rejects.toThrow(/inside a thread/);
+    const z = await repo.createDoc({ spaceId: s.id, title: 'Z' });
+    await repo.moveDoc(z.id, { spaceId: s.id, folderId: thread.id });
+    const fresh = await repo.createDoc({ spaceId: s.id, folderId: thread.id, title: 'New' });
+    expect(await titles(thread.id)).toEqual(['A', 'Z', 'New']);
+    expect(fresh.position).toBe(2);
+  });
+
+  it('trashes and restores a thread with its posts', async () => {
+    const s = await repo.createSpace({ name: 'S' });
+    const a = await repo.createDoc({ spaceId: s.id, title: 'A' });
+    const b = await repo.addPostAfter(a.id);
+    await repo.trash('folder', b.folderId!);
+    expect((await db.docs.get(a.id))!.deletedAt).not.toBeNull();
+    await repo.restore('folder', b.folderId!);
+    expect((await repo.threadPosts(b.folderId!)).map((d) => d.id)).toEqual([a.id, b.id]);
+  });
+});
+
+describe('custom platforms', () => {
+  it('adds, updates and removes a platform, taking it off posts', async () => {
+    const s = await repo.createSpace({ name: 'S' });
+    const p = await repo.createPlatform({ name: ' Bluesky ', url: 'https://bsky.app/', domain: 'bsky.app', icon: { kind: 'monogram', text: 'B' }, limit: 300.4 });
+    expect(p.id.startsWith('custom-')).toBe(true);
+    expect(p.name).toBe('Bluesky');
+    expect(p.limit).toBe(300);
+    await repo.updatePlatform(p.id, { limit: -5 });
+    expect((await db.platforms.get(p.id))!.limit).toBeNull();
+    const d = await repo.createDoc({ spaceId: s.id, platforms: ['x', p.id] });
+    expect(await repo.deletePlatform(p.id)).toBe(1);
+    expect((await db.docs.get(d.id))!.platforms).toEqual(['x']);
+    expect(await db.platforms.count()).toBe(0);
+  });
+});

@@ -1,4 +1,4 @@
-import { Ellipsis, FileText, Folder as FolderIcon, Pin, StickyNote } from 'lucide-react';
+import { Ellipsis, FileText, Folder as FolderIcon, Pin, Spool, StickyNote } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { formatDate, formatRelative } from '../../lib/dates';
 import { endDrag, startDrag } from '../../lib/dnd';
@@ -6,7 +6,7 @@ import { navigate, paths } from '../../lib/router';
 import { folderChain } from '../../lib/tree';
 import type { Doc, Folder } from '../../lib/types';
 import { openMenu } from '../../state/feedback';
-import type { Workspace } from '../../state/workspace';
+import { threadOf, type Workspace } from '../../state/workspace';
 import { docMenu, folderMenu } from '../itemMenus';
 import { PlatformStack, SpaceGlyph, StatusPill } from '../ui/Badges';
 import { cx, IconButton } from '../ui/Button';
@@ -15,6 +15,21 @@ export function locationLabel(ws: Workspace, doc: Pick<Doc, 'spaceId' | 'folderI
   const space = ws.spaceById.get(doc.spaceId);
   const chain = folderChain(ws.folderById, doc.folderId).map((f) => f.name);
   return [space?.name ?? 'Unknown space', ...chain].join(' / ');
+}
+
+/** "Thread 2/5" for posts that belong to a thread. */
+export function ThreadBadge({ doc, ws, className }: { doc: Doc; ws: Workspace; className?: string }) {
+  const place = threadOf(ws, doc);
+  if (!place) return null;
+  return (
+    <span
+      className={cx('inline-flex shrink-0 items-center gap-1 text-[11px] text-fg-3 tabular-nums', className)}
+      data-tip={`Post ${place.index + 1} of ${place.posts.length} in “${place.thread.name}”`}
+    >
+      <Spool size={11} />
+      {place.index + 1}/{place.posts.length}
+    </span>
+  );
 }
 
 function DocKindIcon({ doc, size = 15 }: { doc: Doc; size?: number }) {
@@ -52,6 +67,7 @@ export function DocCard({ doc, ws, showLocation = true, className }: { doc: Doc;
           </span>
         )}
         {doc.pinned && <Pin size={12} className="text-fg-3" />}
+        <ThreadBadge doc={doc} ws={ws} />
         <span className="flex-1" />
         <PlatformStack platforms={doc.platforms} size={12} />
       </div>
@@ -150,6 +166,7 @@ export function DocTableHeader({ showLocation }: { showLocation: boolean }) {
 export function FolderTile({ folder, ws }: { folder: Folder; ws: Workspace }) {
   const docs = ws.docsIn.get(folder.id)?.length ?? 0;
   const subs = ws.foldersIn.get(folder.id)?.length ?? 0;
+  const isThread = folder.kind === 'thread';
   return (
     <a
       href={paths.folder(folder.id)}
@@ -164,12 +181,12 @@ export function FolderTile({ folder, ws }: { folder: Folder; ws: Workspace }) {
       className="group flex items-center gap-3 rounded-xl border border-line bg-raised px-3.5 py-3 transition-colors hover:border-line-strong hover:bg-hover"
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-sunken text-fg-2 ring-1 ring-line ring-inset">
-        <FolderIcon size={17} />
+        {isThread ? <Spool size={17} /> : <FolderIcon size={17} />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13.5px] font-medium text-fg">{folder.name}</span>
         <span className="block text-[12px] text-fg-4">
-          {docs} doc{docs === 1 ? '' : 's'}
+          {isThread ? `Thread · ${docs} post${docs === 1 ? '' : 's'}` : `${docs} doc${docs === 1 ? '' : 's'}`}
           {subs ? ` · ${subs} folder${subs === 1 ? '' : 's'}` : ''}
         </span>
       </span>

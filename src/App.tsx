@@ -1,6 +1,8 @@
 import { Component, lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { Mark } from './brand/Logo';
+import { AddPlatformDialog } from './components/dialogs/AddPlatformDialog';
 import { CommandPalette } from './components/dialogs/CommandPalette';
+import { ConnectPostDialog } from './components/dialogs/ConnectPostDialog';
 import { MoveDialog } from './components/dialogs/MoveDialog';
 import { NewDocDialog } from './components/dialogs/NewDocDialog';
 import { SettingsDialog } from './components/dialogs/SettingsDialog';
@@ -23,6 +25,7 @@ import { CalendarView } from './views/CalendarView';
 import { ContentView } from './views/ContentView';
 import { HomeView } from './views/HomeView';
 import { PipelineView } from './views/PipelineView';
+import { ThreadView } from './views/ThreadView';
 import { TrashView } from './views/TrashView';
 
 // The editor (ProseMirror + TipTap) is most of the bundle; load it on demand.
@@ -177,7 +180,13 @@ function RouteView({ route }: { route: Route }) {
     case 'folder': {
       const folder = ws.folderById.get(route.id);
       const space = folder ? ws.spaceById.get(folder.spaceId) : undefined;
-      if (folder && space && !folder.deletedAt && !space.deletedAt) return <ContentView key={folder.id} scope={{ kind: 'folder', folder, space }} />;
+      if (folder && space && !folder.deletedAt && !space.deletedAt) {
+        return folder.kind === 'thread' ? (
+          <ThreadView key={folder.id} thread={folder} space={space} />
+        ) : (
+          <ContentView key={folder.id} scope={{ kind: 'folder', folder, space }} />
+        );
+      }
       break;
     }
   }
@@ -240,6 +249,8 @@ function Shell() {
       <SpaceDialog />
       <MoveDialog />
       <SettingsDialog />
+      <AddPlatformDialog />
+      <ConnectPostDialog />
       <MenuHost />
       <ConfirmHost />
       <ToastHost />

@@ -32,6 +32,10 @@ interface UIState {
   newDoc: NewDocRequest | null;
   spaceDialog: { editId?: ID; then?: PendingDoc } | null;
   moveItem: { kind: 'doc' | 'folder'; id: ID } | null;
+  /** "Add a platform" dialog; `docId` also switches the new platform on for that document. */
+  addPlatform: { docId?: ID } | null;
+  /** "Connect an existing post" dialog: the chosen post will follow `afterDocId`. */
+  connectPost: { afterDocId: ID } | null;
   renamingId: ID | null;
   expanded: Record<ID, boolean>;
   lastLocation: DocLocation | null;
@@ -52,6 +56,8 @@ export const useUI = create<UIState>()(
       newDoc: null,
       spaceDialog: null,
       moveItem: null,
+      addPlatform: null,
+      connectPost: null,
       renamingId: null,
       expanded: {},
       lastLocation: null,

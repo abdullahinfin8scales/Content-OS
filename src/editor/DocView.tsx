@@ -1,6 +1,8 @@
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import {
   ArchiveRestore,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCopy,
   CopyPlus,
   Ellipsis,
@@ -13,12 +15,15 @@ import {
   Pin,
   PinOff,
   Presentation,
+  Plus,
   Printer,
+  Spool,
   StickyNote,
   Trash,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { MOD } from '../components/sidebar/Sidebar';
+import { nextPostMenu } from '../components/itemMenus';
 import { TopBar, type Crumb } from '../components/TopBar';
 import { PlatformStack, SpaceGlyph, StatusPill } from '../components/ui/Badges';
 import { Button, cx, IconButton } from '../components/ui/Button';
@@ -26,6 +31,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { countChars, countWords, emptyDoc, formatDuration, spokenSeconds, toMarkdown, toPlainText } from '../lib/content';
 import { formatDate, formatTime } from '../lib/dates';
 import { IS_PREVIEW } from '../lib/env';
+import { platformInfo } from '../lib/platforms';
 import { SAVE_EVENT } from '../lib/events';
 import { navigate, paths } from '../lib/router';
 import { useMediaQuery } from '../lib/useMediaQuery';
@@ -36,7 +42,7 @@ import { openMenu, toast, type MenuItem } from '../state/feedback';
 import { repo } from '../state/repo';
 import { useSettings } from '../state/settings';
 import { useUI } from '../state/ui';
-import { useWorkspace, type Workspace } from '../state/workspace';
+import { threadOf, useWorkspace, type Workspace } from '../state/workspace';
 import { DetailsPanel, type LiveStats } from './DetailsPanel';
 import { buildExtensions } from './extensions';
 import { LinkPopover } from './LinkPopover';
@@ -267,7 +273,7 @@ function DocEditor({ doc, ws, initial }: { doc: Doc; ws: Workspace; initial: Ric
         {
           label: 'Download .md',
           icon: <FileDown size={15} />,
-          onSelect: () => downloadFile(`${safeFileName(doc.title)}.md`, toMarkdown(editor?.getJSON(), doc), 'text/markdown;charset=utf-8'),
+          onSelect: () => downloadFile(`${safeFileName(doc.title)}.md`, toMarkdown(editor?.getJSON(), doc, (id) => platformInfo(ws.platforms, id).name), 'text/markdown;charset=utf-8'),
         },
         {
           label: 'Download .txt',
@@ -366,7 +372,8 @@ function DocEditor({ doc, ws, initial }: { doc: Doc; ws: Workspace; initial: Ric
               focusMode ? 'max-w-[760px]' : 'max-w-[860px] lg:mt-8 lg:mb-24 lg:rounded-[22px] lg:border lg:border-line lg:bg-raised lg:px-16 lg:pt-14 lg:shadow-card',
             )}
           >
-            {!focusMode && <MetaChips doc={doc} onOpen={() => setDetails(true)} />}
+            {!focusMode && <ThreadBar doc={doc} ws={ws} />}
+            {!focusMode && <MetaChips doc={doc} ws={ws} onOpen={() => setDetails(true)} />}
             <TitleField doc={doc} editor={editor} />
             <div className="prose-editor mt-6" data-font={doc.font}>
               {editor && <EditorContent editor={editor} />}
@@ -388,7 +395,37 @@ function DocEditor({ doc, ws, initial }: { doc: Doc; ws: Workspace; initial: Ric
   );
 }
 
-function MetaChips({ doc, onOpen }: { doc: Doc; onOpen: () => void }) {
+/** Shown on posts inside a thread: where this post sits, with previous/next. */
+function ThreadBar({ doc, ws }: { doc: Doc; ws: Workspace }) {
+  const place = threadOf(ws, doc);
+  if (!place) return null;
+  const { thread, posts, index } = place;
+  const prev = posts[index - 1];
+  const next = posts[index + 1];
+  return (
+    <div data-print-hide className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-2 rounded-xl border border-line bg-sunken py-1.5 pr-1.5 pl-3 text-[12.5px]">
+      <Spool size={14} className="shrink-0 text-fg-3" />
+      <a href={paths.folder(thread.id)} className="min-w-0 truncate font-medium text-fg hover:underline">
+        {thread.name}
+      </a>
+      <span className="shrink-0 text-fg-4 tabular-nums">
+        · Post {index + 1} of {posts.length}
+      </span>
+      <span className="flex-1" />
+      <IconButton label="Go to previous post" size="sm" disabled={!prev} onClick={() => prev && navigate(paths.doc(prev.id))}>
+        <ChevronLeft size={15} />
+      </IconButton>
+      <IconButton label="Go to next post" size="sm" disabled={!next} onClick={() => next && navigate(paths.doc(next.id))}>
+        <ChevronRight size={15} />
+      </IconButton>
+      <Button size="sm" icon={<Plus size={14} />} onClick={(e) => openMenu(e.currentTarget, nextPostMenu(ws, doc), { align: 'end' })}>
+        Add post
+      </Button>
+    </div>
+  );
+}
+
+function MetaChips({ doc, ws, onOpen }: { doc: Doc; ws: Workspace; onOpen: () => void }) {
   const chip = 'inline-flex h-7 items-center gap-1.5 rounded-full border border-line px-2.5 text-[12px] text-fg-3 transition-colors hover:border-line-strong hover:text-fg';
   return (
     <div className="mb-5 flex flex-wrap items-center gap-1.5" data-print-hide>
@@ -420,6 +457,15 @@ function MetaChips({ doc, onOpen }: { doc: Doc; onOpen: () => void }) {
       {doc.kind === 'content' && !doc.platforms.length && !doc.publishDate && (
         <button onClick={onOpen} className={cx(chip, 'border-dashed')}>
           Add platforms & date
+        </button>
+      )}
+      {doc.kind === 'content' && !threadOf(ws, doc) && (
+        <button
+          onClick={(e) => openMenu(e.currentTarget, nextPostMenu(ws, doc))}
+          className={cx(chip, 'border-dashed')}
+          data-tip="Add or connect a post after this one"
+        >
+          <Spool size={12} /> Start a thread
         </button>
       )}
     </div>

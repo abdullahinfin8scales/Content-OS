@@ -1,6 +1,7 @@
 import { toPlainText } from '../lib/content';
 import { RepoError, type NewDocInput } from '../lib/repo';
 import { navigate, parseHash, paths } from '../lib/router';
+import { outsideThread } from '../lib/tree';
 import type { Doc, ID, ItemKind } from '../lib/types';
 import { confirmDialog, toast } from './feedback';
 import { repo } from './repo';
@@ -8,12 +9,15 @@ import { useSettings } from './settings';
 import { useUI, type DocLocation } from './ui';
 import type { Workspace } from './workspace';
 
-/** Where new things go when nothing more specific is known. */
+/**
+ * Where new things go when nothing more specific is known. A thread is never
+ * the default: new documents go next to it, and posts are added on purpose.
+ */
 export function defaultLocation(ws: Workspace): DocLocation | null {
   const last = useUI.getState().lastLocation;
   if (last && ws.spaceById.get(last.spaceId) && !ws.spaceById.get(last.spaceId)!.deletedAt) {
     const folder = last.folderId ? ws.folderById.get(last.folderId) : null;
-    if (!last.folderId || (folder && !folder.deletedAt)) return last;
+    if (!last.folderId || (folder && !folder.deletedAt)) return outsideThread(ws.folderById, last);
     return { spaceId: last.spaceId, folderId: null };
   }
   const first = ws.spaces[0];
@@ -245,3 +249,66 @@ export async function copyDocText(doc: Doc) {
   await copyToClipboard(text, 'Copied as plain text — ready to paste');
 }
 
+
+/* ------------------------------ Threads ----------------------------- */
+
+/** Creates the next post after `afterId` (starting a thread if needed) and opens it. */
+export async function addNextPost(afterId: ID, ws?: Workspace) {
+  try {
+    const doc = await repo.addPostAfter(afterId);
+    if (doc.folderId) revealLocation({ spaceId: doc.spaceId, folderId: doc.folderId }, ws);
+    navigate(paths.doc(doc.id));
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+/** Adds a post at the end of a thread and opens it. */
+export async function appendPost(threadId: ID, ws: Workspace) {
+  const posts = ws.docsIn.get(threadId) ?? [];
+  const last = posts[posts.length - 1];
+  if (last) return addNextPost(last.id, ws);
+  const thread = ws.folderById.get(threadId);
+  if (!thread) return;
+  try {
+    const doc = await repo.createDoc({ spaceId: thread.spaceId, folderId: thread.id });
+    navigate(paths.doc(doc.id));
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+/** Connects an existing post so it follows `afterId`. */
+export async function connectPostAfter(afterId: ID, docId: ID, ws?: Workspace) {
+  try {
+    await repo.connectAfter(afterId, docId);
+    const doc = await repo.db.docs.get(docId);
+    if (doc?.folderId) revealLocation({ spaceId: doc.spaceId, folderId: doc.folderId }, ws);
+    const posts = doc?.folderId ? await repo.threadPosts(doc.folderId) : [];
+    const n = posts.findIndex((d) => d.id === docId) + 1;
+    toast(n ? `Connected as post ${n} of ${posts.length}` : 'Connected');
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+export async function detachFromThread(docId: ID) {
+  try {
+    await repo.detachPost(docId);
+    toast('Taken out of the thread');
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+/** Copies every post of a thread, in order, with a blank line between posts. */
+export async function copyThread(threadId: ID, ws: Workspace) {
+  const posts = ws.docsIn.get(threadId) ?? [];
+  const texts = await repo.db.texts.bulkGet(posts.map((p) => p.id));
+  const parts = texts.map((t) => (t?.text ?? '').trim()).filter(Boolean);
+  if (!parts.length) {
+    toast('Nothing to copy yet');
+    return;
+  }
+  await copyToClipboard(parts.join('\n\n'), `Copied ${parts.length} post${parts.length === 1 ? '' : 's'} — ready to paste`);
+}

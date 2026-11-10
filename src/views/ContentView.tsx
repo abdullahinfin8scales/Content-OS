@@ -6,10 +6,11 @@ import { PageHeader, TopBar, type Crumb } from '../components/TopBar';
 import { PlatformIcon, SpaceGlyph, StatusDot } from '../components/ui/Badges';
 import { Button, cx, IconButton } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
-import { PLATFORM_META, STATUS_META } from '../lib/meta';
+import { STATUS_META } from '../lib/meta';
+import { platformInfo } from '../lib/platforms';
 import { paths } from '../lib/router';
 import { compareNames, containerKey, descendantFolderIds, folderChain } from '../lib/tree';
-import { PLATFORMS, STATUSES, type Doc, type Folder, type Platform, type Space, type Status } from '../lib/types';
+import { STATUSES, type Doc, type Folder, type Platform, type Space, type Status } from '../lib/types';
 import { newFolder, openNewDocDialog, quickNewDoc, rememberLocation } from '../state/actions';
 import { openMenu } from '../state/feedback';
 import { useUI } from '../state/ui';
@@ -218,17 +219,17 @@ export function ContentView({ scope }: { scope: Scope }) {
               })}
             </div>
             <FilterButton
-              label={platform ? PLATFORM_META[platform].name : 'Platform'}
+              label={platform ? platformInfo(ws.platforms, platform).name : 'Platform'}
               active={!!platform}
               onClick={(el) =>
                 openMenu(el, [
                   { label: 'All platforms', checked: !platform, onSelect: () => setPlatform(null) },
                   { type: 'separator' },
-                  ...PLATFORMS.map((p) => ({
-                    label: PLATFORM_META[p].name,
-                    icon: <PlatformIcon platform={p} size={13} />,
-                    checked: platform === p,
-                    onSelect: () => setPlatform(p),
+                  ...ws.platforms.list.map((p) => ({
+                    label: p.name,
+                    icon: <PlatformIcon platform={p.id} size={13} />,
+                    checked: platform === p.id,
+                    onSelect: () => setPlatform(p.id),
                   })),
                 ])
               }

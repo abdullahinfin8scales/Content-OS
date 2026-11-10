@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Doc, DocContent, DocText, Folder, ID, Space } from './types';
+import type { CustomPlatform, Doc, DocContent, DocText, Folder, ID, Space } from './types';
 
 export const DB_NAME = 'infin8-content-os';
 
@@ -11,6 +11,8 @@ export class ContentDB extends Dexie {
   declare texts: Table<DocText, ID>;
   /** Small app-level records (e.g. the automatic-backup folder handle). */
   declare meta: Table<{ key: string; value: unknown }, string>;
+  /** Social platforms the user added. */
+  declare platforms: Table<CustomPlatform, ID>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -22,5 +24,6 @@ export class ContentDB extends Dexie {
       texts: 'id',
     });
     this.version(2).stores({ meta: 'key' });
+    this.version(3).stores({ platforms: 'id' });
   }
 }

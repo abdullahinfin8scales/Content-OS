@@ -1,4 +1,4 @@
-import { Check, Folder as FolderIcon, Search } from 'lucide-react';
+import { Check, Folder as FolderIcon, Search, Spool } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { descendantFolderIds } from '../../lib/tree';
 import { moveDocTo, moveFolderTo } from '../../state/actions';
@@ -29,7 +29,7 @@ export function MoveDialog() {
   const options = useMemo(() => {
     if (!item) return [];
     const exclude = item.kind === 'folder' ? new Set([item.id, ...descendantFolderIds(ws.folders, item.id)]) : undefined;
-    const all = locationOptions(ws, exclude);
+    const all = locationOptions(ws, { exclude, threads: item.kind === 'doc' });
     const q = query.trim().toLowerCase();
     return q ? all.filter((o) => o.path.toLowerCase().includes(q)) : all;
   }, [ws, item, query]);
@@ -88,7 +88,13 @@ export function MoveDialog() {
             className={cx('flex h-9 w-full items-center gap-2.5 rounded-lg pr-3 text-left text-[13px] transition-colors', i === active ? 'bg-hover text-fg' : 'text-fg-2')}
             style={{ paddingLeft: 12 + (query ? 0 : o.depth * 16) }}
           >
-            {o.folderId ? <FolderIcon size={15} className="text-fg-3" /> : <SpaceGlyph space={o.space} size="sm" />}
+            {o.thread ? (
+              <Spool size={15} className="text-fg-3" />
+            ) : o.folderId ? (
+              <FolderIcon size={15} className="text-fg-3" />
+            ) : (
+              <SpaceGlyph space={o.space} size="sm" />
+            )}
             <span className="min-w-0 flex-1 truncate">{query ? o.path : o.label}</span>
             {o.key === currentKey && (
               <span className="flex items-center gap-1 text-[11.5px] text-fg-4">

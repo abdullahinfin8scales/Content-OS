@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
   Settings,
+  Spool,
   SquareKanban,
   Sun,
   Trash,
@@ -24,7 +25,7 @@ import { IS_PREVIEW } from '../../lib/env';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { canNestFolder, containerKey } from '../../lib/tree';
 import type { Doc, Folder, ID, Space } from '../../lib/types';
-import { moveDocTo, moveFolderTo, openNewDocDialog } from '../../state/actions';
+import { appendPost, moveDocTo, moveFolderTo, openNewDocDialog } from '../../state/actions';
 import { openMenu } from '../../state/feedback';
 import { repo } from '../../state/repo';
 import { resolveTheme, useSettings } from '../../state/settings';
@@ -233,6 +234,7 @@ function dropInto(ws: Workspace, spaceId: ID, folderId: ID | null, onLinger?: ()
       }
       const folder = ws.folderById.get(item.id);
       if (!folder) return false;
+      if (folderId && ws.folderById.get(folderId)?.kind === 'thread') return false;
       if (folder.spaceId === spaceId && folder.parentId === folderId) return false;
       return canNestFolder(ws.folders, item.id, folderId);
     },
@@ -244,11 +246,11 @@ function dropInto(ws: Workspace, spaceId: ID, folderId: ID | null, onLinger?: ()
   };
 }
 
-function RowActions({ onAdd, onMore }: { onAdd?: (el: HTMLElement) => void; onMore: (el: HTMLElement) => void }) {
+function RowActions({ onAdd, onMore, addLabel = 'Add' }: { onAdd?: (el: HTMLElement) => void; onMore: (el: HTMLElement) => void; addLabel?: string }) {
   return (
     <>
       {onAdd && (
-        <IconButton label="Add" size="xs" tip={false} onClick={(e) => onAdd(e.currentTarget)}>
+        <IconButton label={addLabel} size="xs" tip={addLabel !== 'Add'} onClick={(e) => onAdd(e.currentTarget)}>
           <Plus size={14} />
         </IconButton>
       )}
@@ -319,7 +321,8 @@ function FolderNode({ folder, ws, depth, active }: { folder: Folder; ws: Workspa
   const { setExpanded, set } = useUI.getState();
   const children = ws.foldersIn.get(folder.id) ?? [];
   const docs = ws.docsIn.get(folder.id) ?? [];
-  const Icon = expanded ? FolderOpen : FolderIcon;
+  const isThread = folder.kind === 'thread';
+  const Icon = isThread ? Spool : expanded ? FolderOpen : FolderIcon;
 
   return (
     <div role="treeitem" aria-expanded={expanded}>
@@ -336,7 +339,8 @@ function FolderNode({ folder, ws, depth, active }: { folder: Folder; ws: Workspa
         onContextMenu={(e) => openMenu(e, folderMenu(ws, folder))}
         actions={
           <RowActions
-            onAdd={(el) => openMenu(el, newItemsMenu(ws, folder.spaceId, folder.id))}
+            onAdd={isThread ? () => void appendPost(folder.id, ws) : (el) => openMenu(el, newItemsMenu(ws, folder.spaceId, folder.id))}
+            addLabel={isThread ? 'Add post' : 'Add'}
             onMore={(el) => openMenu(el, folderMenu(ws, folder))}
           />
         }
@@ -354,7 +358,7 @@ function FolderNode({ folder, ws, depth, active }: { folder: Folder; ws: Workspa
           {children.map((f) => (
             <FolderNode key={f.id} folder={f} ws={ws} depth={depth + 1} active={active} />
           ))}
-          <DocList docs={docs} ws={ws} depth={depth + 1} active={active} moreHref={paths.folder(folder.id)} />
+          <DocList docs={docs} ws={ws} depth={depth + 1} active={active} moreHref={paths.folder(folder.id)} numbered={isThread} />
           {children.length === 0 && docs.length === 0 && (
             <div className="flex h-7 items-center text-[12px] text-fg-4" style={{ paddingLeft: 8 + (depth + 1) * 14 + 18 }}>
               Empty
@@ -366,12 +370,26 @@ function FolderNode({ folder, ws, depth, active }: { folder: Folder; ws: Workspa
   );
 }
 
-function DocList({ docs, ws, depth, active, moreHref }: { docs: Doc[]; ws: Workspace; depth: number; active: Active; moreHref: string }) {
+function DocList({
+  docs,
+  ws,
+  depth,
+  active,
+  moreHref,
+  numbered,
+}: {
+  docs: Doc[];
+  ws: Workspace;
+  depth: number;
+  active: Active;
+  moreHref: string;
+  numbered?: boolean;
+}) {
   const shown = docs.slice(0, DOCS_SHOWN);
   return (
     <>
-      {shown.map((d) => (
-        <DocNode key={d.id} doc={d} ws={ws} depth={depth} active={active.docId === d.id} />
+      {shown.map((d, i) => (
+        <DocNode key={d.id} doc={d} ws={ws} depth={depth} active={active.docId === d.id} number={numbered ? i + 1 : undefined} />
       ))}
       {docs.length > shown.length && (
         <button
@@ -386,7 +404,7 @@ function DocList({ docs, ws, depth, active, moreHref }: { docs: Doc[]; ws: Works
   );
 }
 
-function DocNode({ doc, ws, depth, active }: { doc: Doc; ws: Workspace; depth: number; active: boolean }) {
+function DocNode({ doc, ws, depth, active, number }: { doc: Doc; ws: Workspace; depth: number; active: boolean; number?: number }) {
   const renaming = useUI((s) => s.renamingId === doc.id);
   const set = useUI((s) => s.set);
   return (
@@ -394,7 +412,21 @@ function DocNode({ doc, ws, depth, active }: { doc: Doc; ws: Workspace; depth: n
       <TreeRow
         depth={depth}
         href={paths.doc(doc.id)}
-        icon={<FileText size={15} className={active ? 'text-fg-2' : 'text-fg-4'} />}
+        icon={
+          number !== undefined ? (
+            <span
+              aria-label={`Post ${number}`}
+              className={cx(
+                'flex h-[15px] min-w-[15px] items-center justify-center rounded-[4px] border px-[3px] text-[9.5px] leading-none font-semibold tabular-nums',
+                active ? 'border-fg-3 text-fg' : 'border-line-strong text-fg-3',
+              )}
+            >
+              {number}
+            </span>
+          ) : (
+            <FileText size={15} className={active ? 'text-fg-2' : 'text-fg-4'} />
+          )
+        }
         label={doc.title || 'Untitled'}
         placeholder={!doc.title}
         active={active}

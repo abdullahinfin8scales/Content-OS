@@ -1,7 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { buildPlatformRegistry, type PlatformRegistry } from '../lib/platforms';
+import { byThreadOrder } from '../lib/repo';
 import { compareNames, containerKey } from '../lib/tree';
-import type { Doc, Folder, ID, Space } from '../lib/types';
+import type { CustomPlatform, Doc, Folder, ID, Space } from '../lib/types';
 import { db } from './repo';
 
 export interface Workspace {
@@ -14,9 +16,12 @@ export interface Workspace {
   docById: Map<ID, Doc>;
   /** Live folders keyed by parent folder id, or `root:<spaceId>`; sorted by name. */
   foldersIn: Map<string, Folder[]>;
-  /** Live docs keyed by folder id, or `root:<spaceId>`; newest first. */
+  /** Live docs keyed by folder id, or `root:<spaceId>`; newest first (threads: in post order). */
   docsIn: Map<string, Doc[]>;
   allTags: string[];
+  /** Built-in and custom platforms. */
+  platforms: PlatformRegistry;
+  customPlatforms: CustomPlatform[];
 }
 
 function group<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
@@ -30,7 +35,7 @@ function group<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   return map;
 }
 
-function build(raw: { spaces: Space[]; folders: Folder[]; docs: Doc[] }): Workspace {
+function build(raw: { spaces: Space[]; folders: Folder[]; docs: Doc[]; platforms: CustomPlatform[] }): Workspace {
   const spaces = raw.spaces.filter((s) => !s.deletedAt).sort((a, b) => a.order - b.order);
   const liveSpaceIds = new Set(spaces.map((s) => s.id));
   const folders = raw.folders.filter((f) => !f.deletedAt && liveSpaceIds.has(f.spaceId));
@@ -38,8 +43,9 @@ function build(raw: { spaces: Space[]; folders: Folder[]; docs: Doc[] }): Worksp
 
   const foldersIn = group(folders, (f) => containerKey(f.spaceId, f.parentId));
   for (const list of foldersIn.values()) list.sort((a, b) => compareNames(a.name, b.name));
+  const threadIds = new Set(folders.filter((f) => f.kind === 'thread').map((f) => f.id));
   const docsIn = group(docs, (d) => containerKey(d.spaceId, d.folderId));
-  for (const list of docsIn.values()) list.sort((a, b) => b.createdAt - a.createdAt);
+  for (const [key, list] of docsIn) list.sort(threadIds.has(key) ? byThreadOrder : (a, b) => b.createdAt - a.createdAt);
 
   const tags = new Set<string>();
   for (const d of docs) for (const t of d.tags) tags.add(t);
@@ -59,7 +65,25 @@ function build(raw: { spaces: Space[]; folders: Folder[]; docs: Doc[] }): Worksp
     foldersIn,
     docsIn,
     allTags: [...tags].sort(compareNames),
+    platforms: buildPlatformRegistry(raw.platforms),
+    customPlatforms: raw.platforms,
   };
+}
+
+export interface ThreadPlace {
+  thread: Folder;
+  posts: Doc[];
+  /** 0-based position of the doc in the thread. */
+  index: number;
+}
+
+/** The thread a document belongs to, with its place in it. */
+export function threadOf(ws: Workspace, doc: Pick<Doc, 'id' | 'folderId'>): ThreadPlace | null {
+  const thread = doc.folderId ? ws.folderById.get(doc.folderId) : undefined;
+  if (!thread || thread.kind !== 'thread' || thread.deletedAt) return null;
+  const posts = ws.docsIn.get(thread.id) ?? [];
+  const index = posts.findIndex((d) => d.id === doc.id);
+  return index < 0 ? null : { thread, posts, index };
 }
 
 const WorkspaceContext = createContext<Workspace | null>(null);
@@ -67,10 +91,11 @@ const WorkspaceContext = createContext<Workspace | null>(null);
 export function WorkspaceProvider({ children, fallback }: { children: ReactNode; fallback: ReactNode }) {
   const raw = useLiveQuery(
     () =>
-      db.transaction('r', db.spaces, db.folders, db.docs, async () => ({
+      db.transaction('r', [db.spaces, db.folders, db.docs, db.platforms], async () => ({
         spaces: await db.spaces.toArray(),
         folders: await db.folders.toArray(),
         docs: await db.docs.toArray(),
+        platforms: await db.platforms.toArray(),
       })),
     [],
   );

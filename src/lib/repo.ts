@@ -4,7 +4,23 @@ import { todayISO } from './dates';
 import { uid } from './ids';
 import { getTemplate } from './templates';
 import { canNestFolder, descendantFolderIds } from './tree';
-import type { Doc, DocFont, DocKind, DocPatch, Folder, ID, ItemKind, Platform, RichNode, Space, SpaceColor, Status } from './types';
+import { CUSTOM_PLATFORM_PREFIX } from './platforms';
+import type {
+  CustomPlatform,
+  Doc,
+  DocFont,
+  DocKind,
+  DocPatch,
+  Folder,
+  ID,
+  ItemKind,
+  Platform,
+  PlatformIconData,
+  RichNode,
+  Space,
+  SpaceColor,
+  Status,
+} from './types';
 
 export class RepoError extends Error {}
 
@@ -23,6 +39,15 @@ export interface NewDocInput {
 }
 
 const byOrder = (a: Space, b: Space) => a.order - b.order;
+
+/** Thread order: by position, then creation time for posts without one. */
+export function byThreadOrder(a: Doc, b: Doc): number {
+  return (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER) || a.createdAt - b.createdAt;
+}
+
+function cleanLimit(limit: number | null | undefined): number | null {
+  return typeof limit === 'number' && Number.isFinite(limit) && limit > 0 ? Math.round(limit) : null;
+}
 
 function derived(json: RichNode) {
   const text = toPlainText(json);
@@ -89,6 +114,7 @@ export class Repo {
       if (parentId) {
         const parent = await this.db.folders.get(parentId);
         if (!parent || parent.deletedAt || parent.spaceId !== space.id) parentId = null;
+        else if (parent.kind === 'thread') throw new RepoError('A thread holds posts only — add the folder next to it instead.');
       }
       const t = Date.now();
       const folder: Folder = {
@@ -120,6 +146,7 @@ export class Repo {
       if (parentId) {
         const parent = await this.db.folders.get(parentId);
         if (!parent || parent.deletedAt) throw new RepoError('Destination folder not found');
+        if (parent.kind === 'thread') throw new RepoError('Folders can’t go inside a thread.');
         spaceId = parent.spaceId;
       }
       const space = await this.db.spaces.get(spaceId);
@@ -148,9 +175,11 @@ export class Repo {
       const space = await this.db.spaces.get(input.spaceId);
       if (!space || space.deletedAt) throw new RepoError('Space not found');
       let folderId = input.folderId ?? null;
+      let position: number | undefined;
       if (folderId) {
         const folder = await this.db.folders.get(folderId);
         if (!folder || folder.deletedAt || folder.spaceId !== space.id) folderId = null;
+        else if (folder.kind === 'thread') position = await this.nextPosition(folder.id);
       }
       const json = input.content ?? emptyDoc();
       const { text, excerpt, wordCount, charCount } = derived(json);
@@ -173,6 +202,7 @@ export class Repo {
         excerpt,
         wordCount,
         charCount,
+        ...(position !== undefined ? { position } : {}),
         createdAt: t,
         updatedAt: t,
         deletedAt: null,
@@ -229,15 +259,170 @@ export class Repo {
       if (!doc || doc.deletedAt) throw new RepoError('Document not found');
       let spaceId = target.spaceId;
       const folderId = target.folderId;
+      let intoThread = false;
       if (folderId) {
         const folder = await this.db.folders.get(folderId);
         if (!folder || folder.deletedAt) throw new RepoError('Destination folder not found');
         spaceId = folder.spaceId;
+        intoThread = folder.kind === 'thread';
       }
       const space = await this.db.spaces.get(spaceId);
       if (!space || space.deletedAt) throw new RepoError('Destination space not found');
       if (doc.spaceId === spaceId && doc.folderId === folderId) return;
-      await this.db.docs.update(id, { spaceId, folderId, updatedAt: Date.now() });
+      const position = intoThread ? await this.nextPosition(folderId!) : undefined;
+      await this.db.docs.update(id, { spaceId, folderId, position, updatedAt: Date.now() });
+    });
+  }
+
+  /* ----------------------------- Threads ---------------------------- */
+
+  /** Posts of a thread, in order. */
+  async threadPosts(threadId: ID): Promise<Doc[]> {
+    const docs = await this.db.docs.where('folderId').equals(threadId).toArray();
+    return docs.filter((d) => !d.deletedAt).sort(byThreadOrder);
+  }
+
+  private async nextPosition(threadId: ID): Promise<number> {
+    const posts = await this.threadPosts(threadId);
+    return posts.reduce((max, d) => Math.max(max, d.position ?? -1), -1) + 1;
+  }
+
+  private async writeOrder(posts: Doc[]) {
+    await Promise.all(posts.map((d, i) => (d.position === i ? null : this.db.docs.update(d.id, { position: i }))));
+  }
+
+  /**
+   * Makes a post the first of a new thread: a thread container is created where
+   * the post is and the post moves into it. Returns the existing thread if the
+   * post already belongs to one.
+   */
+  async ensureThread(docId: ID): Promise<Folder> {
+    return this.db.transaction('rw', this.db.spaces, this.db.folders, this.db.docs, async () => {
+      const doc = await this.db.docs.get(docId);
+      if (!doc || doc.deletedAt) throw new RepoError('Document not found');
+      if (doc.folderId) {
+        const current = await this.db.folders.get(doc.folderId);
+        if (current?.kind === 'thread' && !current.deletedAt) return current;
+      }
+      const t = Date.now();
+      const thread: Folder = {
+        id: uid(),
+        spaceId: doc.spaceId,
+        parentId: doc.folderId,
+        name: doc.title.trim() || 'Untitled thread',
+        kind: 'thread',
+        createdAt: t,
+        updatedAt: t,
+        deletedAt: null,
+        trashRootId: null,
+      };
+      await this.db.folders.add(thread);
+      await this.db.docs.update(docId, { folderId: thread.id, position: 0, updatedAt: t });
+      return thread;
+    });
+  }
+
+  /** Places `docId` right after `afterId` in the thread and renumbers the posts. */
+  private async placeAfter(threadId: ID, afterId: ID, docId: ID) {
+    const posts = (await this.threadPosts(threadId)).filter((d) => d.id !== docId);
+    const moving = await this.db.docs.get(docId);
+    if (!moving) return;
+    const index = posts.findIndex((d) => d.id === afterId);
+    posts.splice(index < 0 ? posts.length : index + 1, 0, moving);
+    await this.writeOrder(posts);
+  }
+
+  /** Creates a new post right after `afterId`, starting a thread if needed. */
+  async addPostAfter(afterId: ID): Promise<Doc> {
+    const thread = await this.ensureThread(afterId);
+    const after = (await this.db.docs.get(afterId))!;
+    const status = after.status === 'posted' ? 'drafting' : after.status;
+    const doc = await this.createDoc({
+      spaceId: thread.spaceId,
+      folderId: thread.id,
+      kind: after.kind,
+      status,
+      platforms: [...after.platforms],
+      tags: [...after.tags],
+      font: after.font,
+      publishDate: status === 'scheduled' ? after.publishDate : null,
+    });
+    await this.db.transaction('rw', this.db.docs, () => this.placeAfter(thread.id, afterId, doc.id));
+    return (await this.db.docs.get(doc.id))!;
+  }
+
+  /** Connects an existing post so it follows `afterId`, starting a thread if needed. */
+  async connectAfter(afterId: ID, docId: ID): Promise<void> {
+    if (afterId === docId) throw new RepoError('A post can’t follow itself.');
+    const doc = await this.db.docs.get(docId);
+    if (!doc || doc.deletedAt) throw new RepoError('Document not found');
+    const thread = await this.ensureThread(afterId);
+    await this.db.transaction('rw', this.db.docs, async () => {
+      if (doc.folderId !== thread.id) {
+        await this.db.docs.update(docId, { spaceId: thread.spaceId, folderId: thread.id, updatedAt: Date.now() });
+      }
+      await this.placeAfter(thread.id, afterId, docId);
+    });
+  }
+
+  /** Moves a post one place earlier (-1) or later (+1) in its thread. */
+  async movePost(docId: ID, direction: -1 | 1): Promise<void> {
+    await this.db.transaction('rw', this.db.folders, this.db.docs, async () => {
+      const doc = await this.db.docs.get(docId);
+      if (!doc?.folderId) return;
+      const posts = await this.threadPosts(doc.folderId);
+      const i = posts.findIndex((d) => d.id === docId);
+      const j = i + direction;
+      if (i < 0 || j < 0 || j >= posts.length) return;
+      [posts[i], posts[j]] = [posts[j], posts[i]];
+      await this.writeOrder(posts);
+    });
+  }
+
+  /** Takes a post out of its thread and puts it where the thread lives. */
+  async detachPost(docId: ID): Promise<void> {
+    await this.db.transaction('rw', this.db.folders, this.db.docs, async () => {
+      const doc = await this.db.docs.get(docId);
+      if (!doc?.folderId) return;
+      const thread = await this.db.folders.get(doc.folderId);
+      if (thread?.kind !== 'thread') return;
+      await this.db.docs.update(docId, { spaceId: thread.spaceId, folderId: thread.parentId, position: undefined, updatedAt: Date.now() });
+      await this.writeOrder(await this.threadPosts(thread.id));
+    });
+  }
+
+  /* ----------------------------- Platforms ---------------------------- */
+
+  async createPlatform(input: { name: string; url: string; domain: string; icon: PlatformIconData; limit: number | null }): Promise<CustomPlatform> {
+    const t = Date.now();
+    const platform: CustomPlatform = {
+      id: CUSTOM_PLATFORM_PREFIX + uid(),
+      name: input.name.trim() || input.domain || 'Platform',
+      url: input.url.trim(),
+      domain: input.domain.trim(),
+      icon: input.icon,
+      limit: cleanLimit(input.limit),
+      createdAt: t,
+      updatedAt: t,
+    };
+    await this.db.platforms.add(platform);
+    return platform;
+  }
+
+  async updatePlatform(id: ID, patch: Partial<Pick<CustomPlatform, 'name' | 'limit'>>): Promise<void> {
+    const clean: Partial<CustomPlatform> = { updatedAt: Date.now() };
+    if (patch.name !== undefined) clean.name = patch.name.trim() || 'Platform';
+    if (patch.limit !== undefined) clean.limit = cleanLimit(patch.limit);
+    await this.db.platforms.update(id, clean);
+  }
+
+  /** Deletes a custom platform and takes it off every document. Returns how many documents changed. */
+  async deletePlatform(id: ID): Promise<number> {
+    return this.db.transaction('rw', this.db.platforms, this.db.docs, async () => {
+      await this.db.platforms.delete(id);
+      const docs = (await this.db.docs.toArray()).filter((d) => d.platforms.includes(id));
+      await Promise.all(docs.map((d) => this.db.docs.update(d.id, { platforms: d.platforms.filter((p) => p !== id) })));
+      return docs.length;
     });
   }
 

@@ -3,8 +3,27 @@ export type ID = string;
 export const STATUSES = ['idea', 'drafting', 'ready', 'scheduled', 'posted'] as const;
 export type Status = (typeof STATUSES)[number];
 
+/** Platforms that ship with the app. */
 export const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'linkedin', 'x', 'threads', 'facebook'] as const;
-export type Platform = (typeof PLATFORMS)[number];
+export type BuiltinPlatform = (typeof PLATFORMS)[number];
+/** A built-in platform (`instagram`) or a platform the user added (`custom-…`). */
+export type Platform = string;
+
+/** A platform logo: a brand glyph (24×24 SVG path) or a letter badge. */
+export type PlatformIconData = { kind: 'path'; path: string; slug?: string; evenOdd?: boolean } | { kind: 'monogram'; text: string };
+
+/** A social platform the user added from a link. */
+export interface CustomPlatform {
+  id: ID;
+  name: string;
+  url: string;
+  domain: string;
+  icon: PlatformIconData;
+  /** Character limit for a post, if known. */
+  limit: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
 
 /** `content` pieces flow through the pipeline/calendar; `note`s are reference docs. */
 export type DocKind = 'content' | 'note';
@@ -47,6 +66,8 @@ export interface Folder extends Trashable {
   spaceId: ID;
   parentId: ID | null;
   name: string;
+  /** `thread`: an ordered set of connected posts; it holds documents only. */
+  kind?: 'thread';
   createdAt: number;
   updatedAt: number;
 }
@@ -81,6 +102,8 @@ export interface Doc extends Trashable {
   excerpt: string;
   wordCount: number;
   charCount: number;
+  /** Order inside a thread (only meaningful when the folder is a thread). */
+  position?: number;
   createdAt: number;
   updatedAt: number;
 }

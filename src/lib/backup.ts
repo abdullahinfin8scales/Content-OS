@@ -11,7 +11,8 @@ import {
   type DocText,
   type Folder,
   type Metrics,
-  type Platform,
+  type CustomPlatform,
+  type PlatformIconData,
   type RichNode,
   type Space,
   type SpaceColor,
@@ -29,12 +30,14 @@ export interface BackupFile {
   folders: Folder[];
   docs: Doc[];
   contents: DocContent[];
+  /** Platforms the user added (missing in backups made before they existed). */
+  platforms: CustomPlatform[];
 }
 
 export class BackupError extends Error {}
 
 export async function exportBackup(db: ContentDB): Promise<BackupFile> {
-  return db.transaction('r', [db.spaces, db.folders, db.docs, db.contents], async () => ({
+  return db.transaction('r', [db.spaces, db.folders, db.docs, db.contents, db.platforms], async () => ({
     app: BACKUP_APP,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
@@ -42,6 +45,7 @@ export async function exportBackup(db: ContentDB): Promise<BackupFile> {
     folders: await db.folders.toArray(),
     docs: await db.docs.toArray(),
     contents: await db.contents.toArray(),
+    platforms: await db.platforms.toArray(),
   }));
 }
 
@@ -86,6 +90,7 @@ function normalizeFolder(raw: unknown): Folder {
     spaceId: raw.spaceId,
     parentId: nullableStr(raw.parentId),
     name: str(raw.name, 'Untitled folder'),
+    ...(raw.kind === 'thread' ? { kind: 'thread' as const } : {}),
     createdAt: num(raw.createdAt, t),
     updatedAt: num(raw.updatedAt, t),
     deletedAt: nullableNum(raw.deletedAt),
@@ -103,7 +108,7 @@ function normalizeMetrics(raw: unknown): Metrics {
   return out;
 }
 
-function normalizeDoc(raw: unknown): Doc {
+function normalizeDoc(raw: unknown, platformIds: Set<string>): Doc {
   if (!isObj(raw)) throw new BackupError('A document entry is malformed.');
   const t = Date.now();
   if (typeof raw.spaceId !== 'string') throw new BackupError('A document is missing its space.');
@@ -115,7 +120,7 @@ function normalizeDoc(raw: unknown): Doc {
     kind: oneOf(raw.kind, ['content', 'note'] as const, 'content'),
     status: oneOf<Status>(raw.status, STATUSES, 'drafting'),
     platforms: Array.isArray(raw.platforms)
-      ? [...new Set(raw.platforms.filter((p): p is Platform => PLATFORMS.includes(p as Platform)))]
+      ? [...new Set(raw.platforms.filter((p): p is string => typeof p === 'string' && ((PLATFORMS as readonly string[]).includes(p) || platformIds.has(p))))]
       : [],
     publishDate: isISODate(raw.publishDate) ? raw.publishDate : null,
     publishTime: typeof raw.publishTime === 'string' && /^\d{2}:\d{2}$/.test(raw.publishTime) ? raw.publishTime : null,
@@ -127,11 +132,39 @@ function normalizeDoc(raw: unknown): Doc {
     excerpt: str(raw.excerpt),
     wordCount: num(raw.wordCount, 0),
     charCount: num(raw.charCount, 0),
+    ...(typeof raw.position === 'number' && Number.isFinite(raw.position) ? { position: raw.position } : {}),
     createdAt: num(raw.createdAt, t),
     updatedAt: num(raw.updatedAt, t),
     deletedAt: nullableNum(raw.deletedAt),
     trashRootId: nullableStr(raw.trashRootId),
   };
+}
+
+function normalizeIcon(raw: unknown, name: string): PlatformIconData {
+  if (isObj(raw) && raw.kind === 'path' && typeof raw.path === 'string' && raw.path.length > 0 && raw.path.length < 20000 && /^[MmZzLlHhVvCcSsQqTtAaEe0-9.,\s-]+$/.test(raw.path)) {
+    return { kind: 'path', path: raw.path, ...(typeof raw.slug === 'string' ? { slug: raw.slug } : {}) };
+  }
+  const text = isObj(raw) && typeof raw.text === 'string' && raw.text.trim() ? raw.text.trim().slice(0, 2) : (name.trim()[0] ?? '?');
+  return { kind: 'monogram', text: text.toUpperCase() };
+}
+
+function normalizePlatform(raw: unknown): CustomPlatform[] {
+  if (!isObj(raw) || typeof raw.id !== 'string' || !raw.id.startsWith('custom-')) return [];
+  const t = Date.now();
+  const name = str(raw.name, 'Platform').slice(0, 60);
+  const limit = typeof raw.limit === 'number' && Number.isFinite(raw.limit) && raw.limit > 0 ? Math.round(raw.limit) : null;
+  return [
+    {
+      id: raw.id,
+      name,
+      url: str(raw.url),
+      domain: str(raw.domain),
+      icon: normalizeIcon(raw.icon, name),
+      limit,
+      createdAt: num(raw.createdAt, t),
+      updatedAt: num(raw.updatedAt, t),
+    },
+  ];
 }
 
 /** Validates an untrusted parsed JSON value and fills in defaults. */
@@ -145,9 +178,11 @@ export function parseBackup(value: unknown): BackupFile {
   for (const key of ['spaces', 'folders', 'docs', 'contents'] as const) {
     if (!Array.isArray(value[key])) throw new BackupError(`The backup is missing its ${key}.`);
   }
+  const platforms = Array.isArray(value.platforms) ? (value.platforms as unknown[]).flatMap(normalizePlatform) : [];
+  const platformIds = new Set(platforms.map((p) => p.id));
   const spaces = (value.spaces as unknown[]).map(normalizeSpace);
   const folders = (value.folders as unknown[]).map(normalizeFolder);
-  const docs = (value.docs as unknown[]).map(normalizeDoc);
+  const docs = (value.docs as unknown[]).map((raw) => normalizeDoc(raw, platformIds));
   const contents: DocContent[] = (value.contents as unknown[]).flatMap((raw) => {
     if (!isObj(raw) || typeof raw.id !== 'string' || !isObj(raw.json)) return [];
     return [{ id: raw.id, json: raw.json as RichNode }];
@@ -170,6 +205,7 @@ export function parseBackup(value: unknown): BackupFile {
     folders: validFolders,
     docs: validDocs,
     contents: contents.filter((c) => docIds.has(c.id)),
+    platforms,
   };
 }
 
@@ -187,8 +223,9 @@ export async function restoreBackup(db: ContentDB, backup: BackupFile): Promise<
     const excerpt = makeExcerpt(toPlainText(json, { headings: false })) || makeExcerpt(text);
     docs.push({ ...doc, excerpt, wordCount: countWords(text), charCount: countChars(text) });
   }
-  await db.transaction('rw', [db.spaces, db.folders, db.docs, db.contents, db.texts], async () => {
-    await Promise.all([db.spaces.clear(), db.folders.clear(), db.docs.clear(), db.contents.clear(), db.texts.clear()]);
+  await db.transaction('rw', [db.spaces, db.folders, db.docs, db.contents, db.texts, db.platforms], async () => {
+    await Promise.all([db.spaces.clear(), db.folders.clear(), db.docs.clear(), db.contents.clear(), db.texts.clear(), db.platforms.clear()]);
+    await db.platforms.bulkAdd(backup.platforms);
     await db.spaces.bulkAdd(backup.spaces);
     await db.folders.bulkAdd(backup.folders);
     await db.docs.bulkAdd(docs);
@@ -198,8 +235,8 @@ export async function restoreBackup(db: ContentDB, backup: BackupFile): Promise<
 }
 
 export async function clearAll(db: ContentDB): Promise<void> {
-  await db.transaction('rw', [db.spaces, db.folders, db.docs, db.contents, db.texts], async () => {
-    await Promise.all([db.spaces.clear(), db.folders.clear(), db.docs.clear(), db.contents.clear(), db.texts.clear()]);
+  await db.transaction('rw', [db.spaces, db.folders, db.docs, db.contents, db.texts, db.platforms], async () => {
+    await Promise.all([db.spaces.clear(), db.folders.clear(), db.docs.clear(), db.contents.clear(), db.texts.clear(), db.platforms.clear()]);
   });
 }
 

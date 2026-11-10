@@ -18,13 +18,14 @@ Mistakes made while building this project, each turned into a rule. Every agent 
 12. **Never change the app's address** (dev/preview ports, Netlify site name, domain) without an export → restore plan the user agreed to. Data is stored per address. → [012](012-data-tied-to-address.md)
 13. **One home for real posts:** https://infin8-content-os.netlify.app. Any other build must say so loudly or be removed. → [013](013-two-homes-for-data.md)
 14. **Dialog autofocus skips hidden and file inputs;** check focus after reordering a dialog. → [014](014-autofocus-hit-hidden-input.md)
-15. **Browser tests:** wait for real state (URL + focus), assert exact text, use `launchPersistentContext` for folder-backup tests, wait out animations before screenshots, check the database for saved data. → [015](015-browser-test-pitfalls.md)
+15. **Browser tests:** wait for real state (URL + focus), assert exact text, use `launchPersistentContext` for folder-backup tests, wait out animations before screenshots, check the database for saved data, hover the row (not its subtree), write scripts with the file tool. → [015](015-browser-test-pitfalls.md)
+16. **A new kind of container must be checked everywhere a destination is chosen:** remembered location, location pickers, drop targets, repo create/move. Threads are never a default location. → [016](016-new-container-leaked-into-defaults.md)
 
 ## Adding a mistake
 
 Add an entry in the same session whenever you ship a bug, act on a wrong assumption, or the user has to correct you:
 
-1. Copy `_template.md` to the next number, e.g. `016-short-title.md`.
+1. Copy `_template.md` to the next number, e.g. `017-short-title.md`.
 2. Fill in what happened, why, the rule, and where.
 3. Add the rule as one line to the list above, in the same style.
 4. Commit it with the fix.

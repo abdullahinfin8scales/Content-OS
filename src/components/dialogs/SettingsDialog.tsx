@@ -1,4 +1,4 @@
-import { ClipboardCopy, Download, FolderOpen, HardDrive, Lock, ShieldCheck, Upload } from 'lucide-react';
+import { ClipboardCopy, Download, FolderOpen, HardDrive, Lock, Plus, ShieldCheck, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Mark } from '../../brand/Logo';
 import { backupFileName, BackupError, clearAll, exportBackup, parseBackup, restoreBackup } from '../../lib/backup';
@@ -9,9 +9,11 @@ import type { DocFont } from '../../lib/types';
 import { copyToClipboard, downloadFile } from '../../state/actions';
 import { confirmDialog, toast } from '../../state/feedback';
 import { backupNow, chooseBackupFolder, reconnectBackupFolder, turnOffAutoBackup, useBackup } from '../../state/backup';
-import { db } from '../../state/repo';
+import { db, repo } from '../../state/repo';
 import { useSettings, type ThemePref } from '../../state/settings';
 import { useUI } from '../../state/ui';
+import { useWorkspace } from '../../state/workspace';
+import { PlatformGlyph } from '../ui/Badges';
 import { Button, cx } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 
@@ -289,6 +291,8 @@ export function SettingsDialog() {
           </Button>
         </Row>
 
+        <PlatformsSection />
+
         {profileAndWriting}
 
         <div className="mt-5 flex items-center gap-3 text-[12px] text-fg-4">
@@ -393,5 +397,63 @@ function AutoBackupRow() {
         </Button>
       </div>
     </Row>
+  );
+}
+
+/** Platforms the user added from a link, with a way to remove them. */
+function PlatformsSection() {
+  const ws = useWorkspace();
+  const custom = ws.platforms.list.filter((p) => p.custom);
+  const builtIn = ws.platforms.list.filter((p) => !p.custom);
+
+  const remove = async (id: string, name: string) => {
+    const uses = ws.docs.filter((d) => d.platforms.includes(id)).length;
+    const ok = await confirmDialog({
+      title: `Remove ${name}?`,
+      message: uses
+        ? `It is on ${uses} post${uses === 1 ? '' : 's'}; it will be taken off ${uses === 1 ? 'it' : 'them'}. The posts themselves stay.`
+        : 'No posts use it.',
+      confirmLabel: 'Remove platform',
+      danger: true,
+    });
+    if (!ok) return;
+    await repo.deletePlatform(id);
+    toast(`${name} removed`);
+  };
+
+  return (
+    <>
+      <div className="label-display mt-7 mb-1">Platforms</div>
+      <Row title="Your platforms" hint={`Built in: ${builtIn.map((p) => p.name).join(', ')}. Add any other platform from a link.`}>
+        <Button size="sm" icon={<Plus size={14} />} onClick={() => useUI.getState().set({ addPlatform: {} })}>
+          Add platform
+        </Button>
+      </Row>
+      {custom.length > 0 && (
+        <div className="mb-2 overflow-hidden rounded-xl border border-line">
+          {custom.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line bg-sunken text-fg">
+                <PlatformGlyph icon={p.icon} name={p.name} size={16} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium text-fg">{p.name}</span>
+                <span className="block truncate text-[11.5px] text-fg-4">
+                  {[p.domain, p.limit ? `${p.limit.toLocaleString()} characters` : null].filter(Boolean).join(' · ') || 'No link'}
+                </span>
+              </span>
+              <button
+                aria-label={`Remove ${p.name}`}
+                data-tip="Remove"
+                onClick={() => void remove(p.id, p.name)}
+                className="rounded-md p-1.5 text-fg-4 transition-colors hover:bg-hover hover:text-danger"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
