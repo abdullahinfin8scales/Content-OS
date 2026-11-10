@@ -18,8 +18,6 @@ const tasks = (...children: RichNode[]): RichNode => ({
 });
 const hr = (): RichNode => ({ type: 'horizontalRule' });
 const doc = (...content: RichNode[]): RichNode => ({ type: 'doc', content });
-const bold = (value: string): RichNode => ({ type: 'text', text: value, marks: [{ type: 'bold' }] });
-const rich = (...content: RichNode[]): RichNode => ({ type: 'paragraph', content });
 
 export type TemplateIcon =
   | 'file'
@@ -247,29 +245,4 @@ export const TEMPLATES: Template[] = [
 
 export function getTemplate(id: string): Template {
   return TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0];
-}
-
-export function welcomeContent(): RichNode {
-  return doc(
-    p('This is your private space for scripts, posts and everything you publish. It all lives in this browser — nothing is uploaded anywhere.'),
-    h(2, 'How it is organised'),
-    bullets(
-      rich(bold('Spaces'), text(' are the big areas — your personal brand, a client, a channel.')),
-      rich(bold('Folders'), text(' live inside spaces and nest as deep as you need.')),
-      rich(bold('Documents'), text(' hold your scripts, captions, threads and notes.')),
-    ),
-    h(2, 'Move fast'),
-    bullets(
-      rich(bold('⌘K / Ctrl K'), text(' — search everything and run any command.')),
-      rich(bold('N'), text(' — new document from a template.')),
-      p('Drag documents and folders onto any folder or space in the sidebar to move them.'),
-      p('Right-click anything in the sidebar for more options.'),
-    ),
-    h(2, 'Track every post'),
-    p('Each document has a status — Idea, Drafting, Ready, Scheduled, Posted — plus platforms, a publish date, the live link and its numbers. Open the Details panel (top right) to edit them. The Pipeline and the Calendar show the big picture.'),
-    h(2, 'Record on camera'),
-    p('Open any script in the Teleprompter for a full-screen, auto-scrolling read.'),
-    h(2, 'Keep a backup'),
-    p('Your data is stored locally in this browser. Export a backup from Settings now and then — clearing your browser data deletes everything.'),
-  );
 }

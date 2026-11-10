@@ -13,7 +13,9 @@ const fresh = async () => {
 describe('backup', () => {
   it('round-trips through JSON into a fresh database', async () => {
     const a = await fresh();
-    await a.repo.seedIfEmpty();
+    const home = await a.repo.createSpace({ name: 'Personal Brand' });
+    await a.repo.createFolder({ spaceId: home.id, name: 'Ideas' });
+    await a.repo.createDoc({ spaceId: home.id, title: 'Notes', kind: 'note' });
     const s = await a.repo.createSpace({ name: 'Client', color: 'violet' });
     const d = await a.repo.createFromTemplate('short-video', { spaceId: s.id });
     await a.repo.updateDoc(d.id, { title: 'Reel', tags: ['hooks'], metrics: { views: 1200 } });

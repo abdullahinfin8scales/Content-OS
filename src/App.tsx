@@ -10,7 +10,7 @@ import { TopBar } from './components/TopBar';
 import { Button, cx } from './components/ui/Button';
 import { EmptyState } from './components/ui/EmptyState';
 import { ConfirmHost, MenuHost, ToastHost, TooltipHost } from './components/ui/Hosts';
-import { IS_PREVIEW } from './lib/env';
+import { IS_PREVIEW, LIVE_URL } from './lib/env';
 import { SAVE_EVENT } from './lib/events';
 import { navigate, parseHash, paths, useRoute, type Route } from './lib/router';
 import { openNewDocDialog } from './state/actions';
@@ -225,6 +225,14 @@ function Shell() {
           (!showSidebar || sidebarHidden) && 'lg:ml-2',
         )}
       >
+        {IS_PREVIEW && (
+          <div data-print-hide className="flex shrink-0 flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-line bg-sunken px-4 py-2 text-center text-[12.5px] text-fg-2">
+            This is a preview. Your real workspace is
+            <a href={LIVE_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-fg underline underline-offset-2">
+              {LIVE_URL.replace('https://', '')}
+            </a>
+          </div>
+        )}
         <RouteView route={route} />
       </main>
       <CommandPalette />

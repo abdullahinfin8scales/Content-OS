@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { formatRelative } from '../lib/dates';
 import { reconnectBackupFolder, useBackup } from '../state/backup';
 import { useSettings } from '../state/settings';
+import { useWorkspace } from '../state/workspace';
 import { useUI } from '../state/ui';
 import { cx } from './ui/Button';
 
@@ -14,6 +15,7 @@ export function BackupStatus() {
   const busy = useBackup((s) => s.busy);
   const folderName = useBackup((s) => s.folderName);
   const lastBackupAt = useSettings((s) => s.lastBackupAt);
+  const hasDocs = useWorkspace().docs.length > 0;
   const openSettings = () => useUI.getState().set({ settingsOpen: true });
   const [, tick] = useState(0);
   useEffect(() => {
@@ -38,8 +40,9 @@ export function BackupStatus() {
     label = busy ? 'Backing up…' : lastBackupAt ? `Backed up ${formatRelative(lastBackupAt)}` : 'Automatic backup on';
     tip = `Saving automatically to “${folderName}”`;
   } else {
-    warn = !lastBackupAt || Date.now() - lastBackupAt > WEEK;
-    label = lastBackupAt ? `Last backup ${formatRelative(lastBackupAt)}` : 'Not backed up yet';
+    // Nothing to lose yet on an empty workspace, so no warning colour.
+    warn = hasDocs && (!lastBackupAt || Date.now() - lastBackupAt > WEEK);
+    label = lastBackupAt ? `Last backup ${formatRelative(lastBackupAt)}` : hasDocs ? 'Not backed up yet' : 'Backups: set up in Settings';
     tip = 'Your posts live only in this browser — set up a backup in Settings';
   }
 

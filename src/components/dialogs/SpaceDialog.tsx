@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { SPACE_COLOR_VAR } from '../../lib/meta';
 import { navigate, paths } from '../../lib/router';
 import { SPACE_COLORS, type SpaceColor } from '../../lib/types';
+import { createDocFromTemplate } from '../../state/actions';
 import { toast } from '../../state/feedback';
 import { repo } from '../../state/repo';
 import { useUI } from '../../state/ui';
@@ -40,8 +41,13 @@ export function SpaceDialog() {
     }
     const space = await repo.createSpace({ name: clean, icon, color });
     useUI.getState().setExpanded(space.id, true);
+    const then = request?.then;
     close();
-    navigate(paths.space(space.id));
+    if (then) {
+      void createDocFromTemplate(then.templateId, { spaceId: space.id, folderId: null }, then.overrides ?? {}, ws);
+    } else {
+      navigate(paths.space(space.id));
+    }
     toast(`Space “${space.name}” created`);
   };
 
@@ -50,7 +56,13 @@ export function SpaceDialog() {
       open={!!request}
       onClose={close}
       title={editing ? 'Edit space' : 'New space'}
-      description={editing ? undefined : 'A space is a top-level area — a brand, a client, a channel or a campaign.'}
+      description={
+        editing
+          ? undefined
+          : request?.then
+            ? 'Documents live inside spaces. Name your first one — a brand, a client or a channel — and your document opens right after.'
+            : 'A space is a top-level area — a brand, a client, a channel or a campaign.'
+      }
       width={480}
       labelledBy="space-dialog-title"
       footer={
@@ -59,7 +71,7 @@ export function SpaceDialog() {
             Cancel
           </Button>
           <Button variant="primary" disabled={!name.trim()} onClick={() => void submit()}>
-            {editing ? 'Save' : 'Create space'}
+            {editing ? 'Save' : request?.then ? 'Create and continue' : 'Create space'}
           </Button>
         </>
       }

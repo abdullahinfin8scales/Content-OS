@@ -7,6 +7,12 @@ export interface DocLocation {
   folderId: ID | null;
 }
 
+/** A document to create as soon as the (first) space exists. */
+export interface PendingDoc {
+  templateId: string;
+  overrides?: { status?: Status; publishDate?: string };
+}
+
 export interface NewDocRequest {
   spaceId?: ID;
   folderId?: ID | null;
@@ -24,7 +30,7 @@ interface UIState {
   paletteOpen: boolean;
   settingsOpen: boolean;
   newDoc: NewDocRequest | null;
-  spaceDialog: { editId?: ID } | null;
+  spaceDialog: { editId?: ID; then?: PendingDoc } | null;
   moveItem: { kind: 'doc' | 'folder'; id: ID } | null;
   renamingId: ID | null;
   expanded: Record<ID, boolean>;

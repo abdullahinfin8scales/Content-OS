@@ -31,16 +31,16 @@ export function NewDocDialog() {
   const location = options.find((o) => o.key === locationKey) ?? options[0];
 
   const create = (index = selected) => {
-    if (!location) {
-      close();
-      set({ spaceDialog: {} });
-      return;
-    }
     const template = TEMPLATES[index];
     const overrides = {
       ...(request?.status && template.kind === 'content' ? { status: request.status } : {}),
       ...(request?.publishDate && template.kind === 'content' ? { publishDate: request.publishDate } : {}),
     };
+    if (!location) {
+      close();
+      set({ spaceDialog: { then: { templateId: template.id, overrides } } });
+      return;
+    }
     close();
     void createDocFromTemplate(template.id, { spaceId: location.spaceId, folderId: location.folderId }, overrides, ws);
   };
@@ -61,28 +61,32 @@ export function NewDocDialog() {
       labelledBy="new-doc-title"
       footer={
         <>
-          <label className="mr-auto flex min-w-0 items-center gap-2 text-[12.5px] text-fg-3">
-            <span className="shrink-0">Save in</span>
-            <select
-              value={location?.key ?? ''}
-              onChange={(e) => setLocationKey(e.target.value)}
-              className="field h-8! max-w-[300px] min-w-0 truncate pr-7! text-[12.5px]"
-              aria-label="Location"
-            >
-              {options.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {' '.repeat(o.depth)}
-                  {o.depth ? '› ' : ''}
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {options.length === 0 ? (
+            <span className="mr-auto text-[12.5px] text-fg-3">You’ll name your first space next — documents live inside spaces.</span>
+          ) : (
+            <label className="mr-auto flex min-w-0 items-center gap-2 text-[12.5px] text-fg-3">
+              <span className="shrink-0">Save in</span>
+              <select
+                value={location?.key ?? ''}
+                onChange={(e) => setLocationKey(e.target.value)}
+                className="field h-8! max-w-[300px] min-w-0 truncate pr-7! text-[12.5px]"
+                aria-label="Location"
+              >
+                {options.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {' '.repeat(o.depth)}
+                    {o.depth ? '› ' : ''}
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <Button variant="ghost" onClick={close}>
             Cancel
           </Button>
           <Button variant="primary" onClick={() => create()}>
-            Create
+            {options.length === 0 ? 'Continue' : 'Create'}
           </Button>
         </>
       }

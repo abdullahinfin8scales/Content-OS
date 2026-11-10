@@ -1,0 +1,8 @@
+# Netlify build settings — used when this repository is connected to Netlify
+# for automatic deploys. Manual deploys upload the built dist/ folder instead.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"

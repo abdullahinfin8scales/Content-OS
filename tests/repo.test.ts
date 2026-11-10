@@ -199,16 +199,10 @@ describe('trash', () => {
   });
 });
 
-describe('seed', () => {
-  it('seeds once', async () => {
-    expect(await repo.seedIfEmpty()).toBe(true);
-    expect(await repo.seedIfEmpty()).toBe(false);
-    expect(await db.spaces.count()).toBe(1);
-    expect(await db.folders.count()).toBe(3);
-    const docs = await db.docs.toArray();
-    expect(docs).toHaveLength(1);
-    expect(docs[0].kind).toBe('note');
-    expect(docs[0].pinned).toBe(true);
-    expect(docs[0].wordCount).toBeGreaterThan(50);
+describe('fresh install', () => {
+  it('starts with no spaces, folders or documents', async () => {
+    expect(await db.spaces.count()).toBe(0);
+    expect(await db.folders.count()).toBe(0);
+    expect(await db.docs.count()).toBe(0);
   });
 });

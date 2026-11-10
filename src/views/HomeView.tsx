@@ -1,5 +1,5 @@
-import { ArrowRight, House, LayoutGrid, Pin, ShieldAlert } from 'lucide-react';
-import { useMemo } from 'react';
+import { ArrowRight, FileText, Folder as FolderIcon, House, LayoutGrid, Pin, ShieldAlert, Sparkles } from 'lucide-react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Mark } from '../brand/Logo';
 import { DocCard } from '../components/docs/DocItems';
 import { TEMPLATE_ICONS } from '../components/icons';
@@ -12,7 +12,10 @@ import { IS_PREVIEW } from '../lib/env';
 import { paths } from '../lib/router';
 import { getTemplate } from '../lib/templates';
 import type { Doc, Status } from '../lib/types';
-import { createDocFromTemplate, defaultLocation, openNewDocDialog } from '../state/actions';
+import { MOD } from '../components/sidebar/Sidebar';
+import { createDocFromTemplate, defaultLocation, openNewDocDialog, rememberLocation } from '../state/actions';
+import { toast } from '../state/feedback';
+import { repo } from '../state/repo';
 import { useBackup } from '../state/backup';
 import { useSettings } from '../state/settings';
 import { useUI } from '../state/ui';
@@ -45,6 +48,9 @@ export function HomeView() {
     };
   }, [ws, today]);
 
+  const noSpaces = ws.spaces.length === 0;
+  const noDocs = ws.docs.length === 0;
+
   const subtitle = [
     data.ideas && `${data.ideas} idea${data.ideas === 1 ? '' : 's'} waiting`,
     data.upcoming.length && `${data.upcoming.length} coming up`,
@@ -54,7 +60,7 @@ export function HomeView() {
   const create = (templateId: string) => {
     const location = defaultLocation(ws);
     if (!location) {
-      useUI.getState().set({ spaceDialog: {} });
+      useUI.getState().set({ spaceDialog: { then: { templateId } } });
       return;
     }
     void createDocFromTemplate(templateId, location, {}, ws);
@@ -74,11 +80,19 @@ export function HomeView() {
               {name ? `, ${name}` : ''}.
             </h1>
             <p className="mt-3 text-[15px] text-fg-3">
-              {subtitle.length ? subtitle.join(' · ') : 'A clean slate. What are you making today?'}
+              {noSpaces
+                ? 'Your workspace is empty. Start with a space for your content.'
+                : noDocs
+                  ? 'Your space is ready. Pick a template to write your first piece.'
+                  : subtitle.length
+                    ? subtitle.join(' · ')
+                    : 'What are you making today?'}
             </p>
           </section>
 
           <BackupNudge docCount={ws.docs.length} />
+
+          {noSpaces && <FirstSpace />}
 
           {/* Quick create */}
           <section className="mb-10">
@@ -112,6 +126,10 @@ export function HomeView() {
             </div>
           </section>
 
+          {noDocs ? (
+            <HowItWorks />
+          ) : (
+            <>
           {/* Stats */}
           <section className="mb-10 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatTile label="Ideas" value={data.ideas} status="idea" href={paths.pipeline()} />
@@ -157,6 +175,8 @@ export function HomeView() {
               </div>
             </section>
           </div>
+            </>
+          )}
         </div>
       </div>
     </>
@@ -336,6 +356,85 @@ function BackupNudge({ docCount }: { docCount: number }) {
           Set up backup
         </Button>
       </div>
+    </section>
+  );
+}
+
+/** First run: name the first space right here — no dialog, no demo content. */
+function FirstSpace() {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const clean = name.trim();
+    if (!clean || busy) return;
+    setBusy(true);
+    try {
+      const space = await repo.createSpace({ name: clean });
+      useUI.getState().setExpanded(space.id, true);
+      rememberLocation({ spaceId: space.id, folderId: null });
+      toast(`Space “${space.name}” created — pick a template to start writing`, { tone: 'success' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="mb-10 rounded-2xl border border-line-strong bg-raised p-5 shadow-card sm:p-6">
+      <div className="flex flex-col gap-5 md:flex-row md:items-end">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[18px] font-semibold tracking-[-0.01em] text-fg">Create your first space</h2>
+          <p className="mt-1 max-w-[560px] text-[13px] leading-relaxed text-fg-3">
+            A space holds your folders and documents. Most creators start with one for their personal brand, then add one per client or channel.
+          </p>
+        </div>
+        <form onSubmit={(e) => void submit(e)} className="flex w-full gap-2 md:w-auto">
+          <input
+            id="first-space-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Personal brand"
+            aria-label="Space name"
+            maxLength={60}
+            className="field h-10! min-w-0 flex-1 text-[14px] md:w-[240px] md:flex-none"
+          />
+          <Button type="submit" variant="primary" disabled={!name.trim() || busy} className="h-10!">
+            Create space
+          </Button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+/** Shown until the first document exists, in place of an all-zero dashboard. */
+function HowItWorks() {
+  const items = [
+    { icon: <Sparkles size={16} />, title: 'Spaces', body: 'Top-level areas: your personal brand, a client, a channel.' },
+    { icon: <FolderIcon size={16} />, title: 'Folders', body: 'Inside spaces, nested as deep as you like: Ideas, Scripts, Published, by month.' },
+    {
+      icon: <FileText size={16} />,
+      title: 'Documents',
+      body: 'Scripts, captions and threads, each with a status, platforms, a publish date, the live link and its numbers.',
+    },
+  ];
+  return (
+    <section className="mb-10">
+      <div className="label-display mb-3">How it fits together</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.title} className="rounded-2xl border border-line p-4">
+            <div className="flex items-center gap-2 text-fg-2">
+              {item.icon}
+              <span className="text-[13.5px] font-semibold text-fg">{item.title}</span>
+            </div>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-fg-3">{item.body}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 flex flex-wrap items-center gap-1.5 text-[12.5px] text-fg-4">
+        Press <span className="kbd">N</span> for a new document and <span className="kbd">{MOD} K</span> to search. Once you have a few posts, turn on
+        automatic backup in Settings.
+      </p>
     </section>
   );
 }

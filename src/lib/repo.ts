@@ -2,7 +2,7 @@ import type { ContentDB } from './db';
 import { countChars, countWords, emptyDoc, makeExcerpt, toPlainText } from './content';
 import { todayISO } from './dates';
 import { uid } from './ids';
-import { getTemplate, welcomeContent } from './templates';
+import { getTemplate } from './templates';
 import { canNestFolder, descendantFolderIds } from './tree';
 import type { Doc, DocFont, DocKind, DocPatch, Folder, ID, ItemKind, Platform, RichNode, Space, SpaceColor, Status } from './types';
 
@@ -391,39 +391,5 @@ export class Repo {
     await this.db.docs.bulkDelete(ids);
     await this.db.contents.bulkDelete(ids);
     await this.db.texts.bulkDelete(ids);
-  }
-
-  /* ------------------------------ Seed ------------------------------ */
-
-  /** First run: one space, three folders and a pinned welcome note. */
-  async seedIfEmpty(): Promise<boolean> {
-    const seeded = await this.db.transaction('rw', this.db.spaces, async () => {
-      if ((await this.db.spaces.count()) > 0) return false;
-      const t = Date.now();
-      await this.db.spaces.add({
-        id: 'space-personal',
-        name: 'Personal Brand',
-        icon: 'sparkles',
-        color: 'white',
-        order: 0,
-        createdAt: t,
-        updatedAt: t,
-        deletedAt: null,
-        trashRootId: null,
-      });
-      return true;
-    });
-    if (!seeded) return false;
-    for (const name of ['Ideas', 'Scripts', 'Published']) {
-      await this.createFolder({ spaceId: 'space-personal', name });
-    }
-    await this.createDoc({
-      spaceId: 'space-personal',
-      title: 'Welcome to your Content OS',
-      content: welcomeContent(),
-      kind: 'note',
-      pinned: true,
-    });
-    return true;
   }
 }

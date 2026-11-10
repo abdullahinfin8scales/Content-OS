@@ -103,7 +103,6 @@ export function SettingsDialog() {
       });
       if (!ok) return;
       await restoreBackup(db, parsed);
-      localStorage.setItem('infin8.seeded', '1');
       close();
       navigate(paths.home(), { replace: true });
       toast('Backup restored', { tone: 'success' });

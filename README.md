@@ -1,5 +1,7 @@
 # Infin8 Content OS
 
+**Live:** https://infin8-content-os.netlify.app
+
 A private writing and archive space for social media content, styled in the infin8scale identity. Write scripts and posts in a Google-Docs-style editor, organise them into **spaces → folders → documents**, track each piece from idea to posted, and keep an archive of everything you publish with its link and numbers.
 
 Everything is stored **locally in your browser** on your laptop. There is no server, no account and no upload — and automatic backups to a folder you choose keep a copy outside the browser.
@@ -68,17 +70,19 @@ npm run build:preview  # single-file build for a claude.ai preview page
 
 ## Using it every day
 
-The most reliable setup on a laptop: deploy once, then install it as an app.
+1. Open https://infin8-content-os.netlify.app in Chrome or Edge and use **Install app** in the address bar, so it opens in its own window like a desktop app.
+2. In **Settings → Backups & data**, choose a backup folder inside Google Drive, Dropbox or iCloud Drive.
+3. Keep using that same address. A fresh install starts empty: create your first space from Home.
 
-1. Host the `dist/` build (for example Vercel or Netlify, connected to this repository — every push redeploys).
-2. Open the URL in Chrome or Edge and use **Install app** in the address bar, so it opens in its own window like a desktop app.
-3. In **Settings → Backups & data**, choose a backup folder inside Google Drive, Dropbox or iCloud Drive.
-
-Running it locally with `npm run build` then `npm run preview` also works, but needs a terminal each time.
+Running it locally with `npm run build` then `npm run preview` also works, but that is a different address with its own, separate data.
 
 ## Deploy
 
-The build is a static site with hash routing (`#library`, `#doc-<id>`). Host `dist/` anywhere (Netlify, Vercel, GitHub Pages, any static server) with no rewrites needed. Every visitor gets their own empty, private workspace in their own browser.
+Hosted on Netlify as `infin8-content-os` (production URL above). `netlify.toml` holds the build settings, so connecting this repository in Netlify gives automatic deploys on every push; until then, deploys upload the built `dist/` folder. `public/_headers` adds security headers (content security policy, no framing, no search indexing) and long-term caching for hashed assets.
+
+**Don't rename the site or move it to another domain without moving your data first:** the browser stores everything per address, so a new address starts empty. Export a backup on the old address and restore it on the new one.
+
+The build is a static site with hash routing (`#library`, `#doc-<id>`), so any static host works with no rewrites. Every visitor gets their own empty, private workspace in their own browser — nobody else can see your posts.
 
 `npm run build:preview` packs the app into one self-contained HTML file for a claude.ai preview page. Inside that sandbox, downloads, printing and folder backups are unavailable, so the preview swaps Export for “Copy backup” and labels itself as a preview.
 

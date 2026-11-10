@@ -4,3 +4,6 @@
  * blocked, so those features are swapped for alternatives or hidden.
  */
 export const IS_PREVIEW = import.meta.env.MODE === 'artifact';
+
+/** Where the real app lives (data is stored per address, so this one is permanent). */
+export const LIVE_URL = 'https://infin8-content-os.netlify.app';

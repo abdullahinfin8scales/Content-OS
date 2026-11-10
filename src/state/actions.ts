@@ -67,8 +67,7 @@ export async function createDocFromTemplate(
 export async function quickNewDoc(ws: Workspace, location?: DocLocation) {
   const target = location ?? defaultLocation(ws);
   if (!target) {
-    useUI.getState().set({ spaceDialog: {} });
-    toast('Create a space first — documents live inside spaces.');
+    useUI.getState().set({ spaceDialog: { then: { templateId: 'blank' } } });
     return;
   }
   await createDocFromTemplate('blank', target, {}, ws);
