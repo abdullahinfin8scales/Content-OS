@@ -20,8 +20,8 @@ export type AuthStatus = 'off' | 'loading' | 'signedOut' | 'signedIn' | 'recover
 interface AuthState {
   status: AuthStatus;
   user: AuthUser | null;
-  /** Whether new accounts can be created (it is switched off once the owner's account exists). */
-  signupOpen: boolean;
+  /** Whether new accounts can be created (switched off once the owner's account exists); null until known. */
+  signupOpen: boolean | null;
   /** Signed in from the saved session while the cloud couldn't be reached. */
   offline: boolean;
 }
@@ -29,7 +29,7 @@ interface AuthState {
 export const useAuth = create<AuthState>(() => ({
   status: SYNC_ENABLED ? 'loading' : 'off',
   user: null,
-  signupOpen: false,
+  signupOpen: null,
   offline: false,
 }));
 
@@ -55,7 +55,7 @@ async function loadSignupSetting() {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: SUPABASE_KEY } });
     if (!res.ok) return;
     const settings = (await res.json()) as { disable_signup?: boolean };
-    useAuth.setState({ signupOpen: settings.disable_signup === false });
+    useAuth.setState({ signupOpen: settings.disable_signup !== true });
   } catch {
     // Offline: the sign-in form still works with a saved session.
   }

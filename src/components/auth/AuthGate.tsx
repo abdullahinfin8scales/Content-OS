@@ -208,7 +208,7 @@ function SignInScreen() {
           ) : (
             <>
               <LinkButton onClick={() => go('forgot')}>Forgot password?</LinkButton>
-              {signupOpen && <LinkButton onClick={() => go('signUp')}>Create an account</LinkButton>}
+              {signupOpen !== false && <LinkButton onClick={() => go('signUp')}>Create an account</LinkButton>}
             </>
           )}
         </div>
