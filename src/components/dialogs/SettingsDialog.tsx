@@ -198,7 +198,10 @@ export function SettingsDialog() {
     <Modal open={open} onClose={close} title="Settings" width={640} labelledBy="settings-title">
       <div className="px-6 pb-6">
         {SYNC_ENABLED && <AccountSection onDone={close} />}
-        <div className={cx('label-display mb-1', SYNC_ENABLED ? 'mt-7' : 'mt-3')}>Backups & data</div>
+        {/* The first section heading takes focus, so Settings opens at the top instead of jumping to "Your name". */}
+        <div className={cx('label-display mb-1 outline-none', SYNC_ENABLED ? 'mt-7' : 'mt-3')} tabIndex={-1} data-autofocus>
+          Backups & data
+        </div>
         <div className="mt-2 flex items-start gap-3 rounded-xl border border-line bg-sunken p-3.5 text-[12.5px] leading-relaxed text-fg-2">
           <Lock size={15} className="mt-0.5 shrink-0 text-fg-3" />
           {IS_PREVIEW ? (
@@ -607,7 +610,9 @@ function AccountSection({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <div className="label-display mt-3 mb-1">Account</div>
+      <div className="label-display mt-3 mb-1 outline-none" tabIndex={-1} data-autofocus>
+        Account
+      </div>
       <Row title="Signed in" hint={user?.email ?? ''}>
         <Button size="sm" icon={<LogOut size={14} />} disabled={busy} onClick={() => void doSignOut()}>
           Sign out

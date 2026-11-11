@@ -20,12 +20,13 @@ Mistakes made while building this project, each turned into a rule. Every agent 
 14. **Dialog autofocus skips hidden and file inputs;** check focus after reordering a dialog. → [014](014-autofocus-hit-hidden-input.md)
 15. **Browser tests:** wait for real state (URL + focus), assert exact text, use `launchPersistentContext` for folder-backup tests, wait out animations before screenshots, check the database for saved data, hover the row (not its subtree), write scripts with the file tool. → [015](015-browser-test-pitfalls.md)
 16. **A new kind of container must be checked everywhere a destination is chosen:** remembered location, location pickers, drop targets, repo create/move. Threads are never a default location. → [016](016-new-container-leaked-into-defaults.md)
+17. **Short, structured messages:** one-line summary, then numbered steps or bullets; bold what the user must do; never drop an important detail to save space. → [017](017-long-messages-hid-details.md)
 
 ## Adding a mistake
 
 Add an entry in the same session whenever you ship a bug, act on a wrong assumption, or the user has to correct you:
 
-1. Copy `_template.md` to the next number, e.g. `017-short-title.md`.
+1. Copy `_template.md` to the next number, e.g. `018-short-title.md`.
 2. Fill in what happened, why, the rule, and where.
 3. Add the rule as one line to the list above, in the same style.
 4. Commit it with the fix.
