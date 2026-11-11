@@ -8,7 +8,7 @@ import { PlatformStack, StatusDot } from '../components/ui/Badges';
 import { Button, cx } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { addDays, formatDueLabel, formatLongDate, formatTime, greeting, parseISODate, toISODate, todayISO, weekStartsOn } from '../lib/dates';
-import { IS_PREVIEW } from '../lib/env';
+import { IS_PREVIEW, SYNC_ENABLED } from '../lib/env';
 import { paths } from '../lib/router';
 import { getTemplate } from '../lib/templates';
 import type { Doc, Status } from '../lib/types';
@@ -345,7 +345,9 @@ function BackupNudge({ docCount }: { docCount: number }) {
       <div className="min-w-0 flex-1">
         <div className="text-[14px] font-semibold text-fg">{lastBackupAt ? 'Your last backup is over a week old' : 'Your posts aren’t backed up yet'}</div>
         <p className="mt-0.5 text-[13px] leading-relaxed text-fg-3">
-          They live only in this browser. Turn on automatic backup so clearing your browser, or losing this laptop, can’t take them with it.
+          {SYNC_ENABLED
+            ? 'They’re in your account, but the free cloud plan keeps no backups. Turn on automatic backup so a mistake can always be undone from a file.'
+            : 'They live only in this browser. Turn on automatic backup so clearing your browser, or losing this laptop, can’t take them with it.'}
         </p>
       </div>
       <div className="flex shrink-0 gap-2">

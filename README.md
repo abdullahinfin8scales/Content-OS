@@ -4,7 +4,7 @@
 
 A private writing and archive space for social media content, styled in the infin8scale identity. Write scripts and posts in a Google-Docs-style editor, organise them into **spaces → folders → documents**, track each piece from idea to posted, and keep an archive of everything you publish with its link and numbers.
 
-Everything is stored **locally in your browser** on your laptop. There is no server, no account and no upload — and automatic backups to a folder you choose keep a copy outside the browser.
+You sign in with one private account. Your posts are kept **in your browser** (fast, works offline) and **synced to your account** in the cloud (Supabase), so clearing the browser or switching laptops never loses them. Automatic backups to a folder you choose keep one more copy.
 
 ## Features
 
@@ -35,6 +35,7 @@ Everything is stored **locally in your browser** on your laptop. There is no ser
 - Light and system themes. Works on mobile.
 
 **Keeping posts safe**
+- **Account and cloud sync**: email + password sign-in. Every change uploads within seconds; other devices download it. Works offline and catches up when the connection is back. Only your account can read your rows (row-level security). The sidebar shows the sync state.
 - **Automatic backup** to a folder you pick (Chrome, Edge, Brave or Arc on a computer): a full copy shortly after each change, plus one dated snapshot per day — the last 30 are kept. Pick a folder inside Google Drive, Dropbox or iCloud Drive and you also have a copy off the laptop.
 - The sidebar always shows when the last backup happened; Home reminds you if there has been none for a week.
 - A backup is never replaced by an empty one, so “Delete all data” can't wipe your safety copy.

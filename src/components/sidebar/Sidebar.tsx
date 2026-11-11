@@ -21,7 +21,7 @@ import { useEffect, useMemo } from 'react';
 import { Wordmark } from '../../brand/Logo';
 import type { DragItem } from '../../lib/dnd';
 import { navigate, paths, useRoute, type Route } from '../../lib/router';
-import { IS_PREVIEW } from '../../lib/env';
+import { IS_PREVIEW, SYNC_ENABLED } from '../../lib/env';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { canNestFolder, containerKey } from '../../lib/tree';
 import type { Doc, Folder, ID, Space } from '../../lib/types';
@@ -32,6 +32,7 @@ import { resolveTheme, useSettings } from '../../state/settings';
 import { isExpanded, useUI } from '../../state/ui';
 import { useWorkspace, type Workspace } from '../../state/workspace';
 import { BackupStatus } from '../BackupStatus';
+import { SyncStatus } from '../SyncStatus';
 import { docMenu, folderMenu, newItemsMenu, spaceMenu } from '../itemMenus';
 import { SpaceGlyph, StatusDot } from '../ui/Badges';
 import { cx, IconButton } from '../ui/Button';
@@ -183,7 +184,10 @@ export function Sidebar() {
               Preview · for trying it out
             </button>
           ) : (
-            <BackupStatus />
+            <>
+              {SYNC_ENABLED && <SyncStatus />}
+              <BackupStatus />
+            </>
           )}
         </div>
       </aside>

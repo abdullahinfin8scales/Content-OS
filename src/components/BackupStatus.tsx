@@ -1,6 +1,7 @@
 import { ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatRelative } from '../lib/dates';
+import { SYNC_ENABLED } from '../lib/env';
 import { reconnectBackupFolder, useBackup } from '../state/backup';
 import { useSettings } from '../state/settings';
 import { useWorkspace } from '../state/workspace';
@@ -42,8 +43,10 @@ export function BackupStatus() {
   } else {
     // Nothing to lose yet on an empty workspace, so no warning colour.
     warn = hasDocs && (!lastBackupAt || Date.now() - lastBackupAt > WEEK);
-    label = lastBackupAt ? `Last backup ${formatRelative(lastBackupAt)}` : hasDocs ? 'Not backed up yet' : 'Backups: set up in Settings';
-    tip = 'Your posts live only in this browser — set up a backup in Settings';
+    label = lastBackupAt ? `Last backup ${formatRelative(lastBackupAt)}` : hasDocs ? 'No backup file yet' : 'Backups: set up in Settings';
+    tip = SYNC_ENABLED
+      ? 'Your account has no automatic backups on the free plan — keep a backup file in a folder too'
+      : 'Your posts live only in this browser — set up a backup in Settings';
   }
 
   const Icon = warn ? ShieldAlert : ShieldCheck;

@@ -1,17 +1,19 @@
-import { ClipboardCopy, Download, FolderOpen, HardDrive, Lock, Pencil, Plus, ShieldCheck, Upload, X } from 'lucide-react';
+import { ClipboardCopy, Cloud, Download, FolderOpen, HardDrive, KeyRound, Lock, LogOut, Pencil, Plus, RefreshCw, ShieldCheck, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Mark } from '../../brand/Logo';
 import { backupFileName, BackupError, clearAll, exportBackup, parseBackup, restoreBackup } from '../../lib/backup';
-import { IS_PREVIEW } from '../../lib/env';
+import { IS_PREVIEW, SYNC_ENABLED } from '../../lib/env';
 import { formatRelative } from '../../lib/dates';
 import type { PlatformInfo } from '../../lib/platforms';
 import { navigate, paths } from '../../lib/router';
 import type { DocFont } from '../../lib/types';
 import { copyToClipboard, downloadFile } from '../../state/actions';
 import { confirmDialog, toast } from '../../state/feedback';
+import { setNewPassword, signOut, useAuth } from '../../state/auth';
 import { backupNow, chooseBackupFolder, reconnectBackupFolder, turnOffAutoBackup, useBackup } from '../../state/backup';
 import { db, repo } from '../../state/repo';
 import { useSettings, type ThemePref } from '../../state/settings';
+import { syncNow, useSync } from '../../state/sync';
 import { useUI } from '../../state/ui';
 import { useWorkspace } from '../../state/workspace';
 import { PlatformGlyph } from '../ui/Badges';
@@ -97,7 +99,7 @@ export function SettingsDialog() {
         message: (
           <>
             It contains {parsed.spaces.length} space{parsed.spaces.length === 1 ? '' : 's'} and {parsed.docs.length} document
-            {parsed.docs.length === 1 ? '' : 's'}. <strong className="text-fg">Everything currently in the app will be replaced.</strong> Export a backup
+            {parsed.docs.length === 1 ? '' : 's'}. <strong className="text-fg">Everything currently in the app{SYNC_ENABLED ? ' and in your account' : ''} will be replaced.</strong> Export a backup
             first if you are unsure.
           </>
         ),
@@ -117,7 +119,9 @@ export function SettingsDialog() {
   const doErase = async () => {
     const ok = await confirmDialog({
       title: 'Delete all data?',
-      message: 'Every space, folder and document in this browser will be erased permanently. Export a backup first if you might need it.',
+      message: SYNC_ENABLED
+        ? 'Every space, folder and document will be erased permanently — from your account and from this laptop. Export a backup first if you might need it.'
+        : 'Every space, folder and document in this browser will be erased permanently. Export a backup first if you might need it.',
       confirmLabel: 'Erase everything',
       danger: true,
     });
@@ -193,7 +197,8 @@ export function SettingsDialog() {
   return (
     <Modal open={open} onClose={close} title="Settings" width={640} labelledBy="settings-title">
       <div className="px-6 pb-6">
-        <div className="label-display mt-3 mb-1">Backups & data</div>
+        {SYNC_ENABLED && <AccountSection onDone={close} />}
+        <div className={cx('label-display mb-1', SYNC_ENABLED ? 'mt-7' : 'mt-3')}>Backups & data</div>
         <div className="mt-2 flex items-start gap-3 rounded-xl border border-line bg-sunken p-3.5 text-[12.5px] leading-relaxed text-fg-2">
           <Lock size={15} className="mt-0.5 shrink-0 text-fg-3" />
           {IS_PREVIEW ? (
@@ -204,8 +209,17 @@ export function SettingsDialog() {
             </div>
           ) : (
             <div>
-              Everything stays in this browser on this laptop — nothing is uploaded. Browser storage can still be wiped (clearing site data, a reinstall, a
-              broken laptop), so <span className="text-fg">keep a copy outside the browser.</span>
+              {SYNC_ENABLED ? (
+                <>
+                  Your posts are saved to your account (Supabase) and kept in this browser, so they work offline and come back after the browser is
+                  cleared. The free plan has no automatic cloud backups, so <span className="text-fg">keep a backup file outside the browser too.</span>
+                </>
+              ) : (
+                <>
+                  Everything stays in this browser on this laptop — nothing is uploaded. Browser storage can still be wiped (clearing site data, a
+                  reinstall, a broken laptop), so <span className="text-fg">keep a copy outside the browser.</span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -286,7 +300,10 @@ export function SettingsDialog() {
             )}
           </Row>
         )}
-        <Row title="Erase everything" hint="Deletes all spaces, folders and documents from this browser.">
+        <Row
+          title="Erase everything"
+          hint={SYNC_ENABLED ? 'Deletes all spaces, folders and documents from your account and this laptop.' : 'Deletes all spaces, folders and documents from this browser.'}
+        >
           <Button size="sm" variant="ghost" className="text-danger! hover:bg-danger/10!" onClick={() => void doErase()}>
             Delete all data
           </Button>
@@ -521,5 +538,118 @@ function PlatformRow({ platform: p, onRemove }: { platform: PlatformInfo; onRemo
         </>
       )}
     </div>
+  );
+}
+
+/** Who is signed in, whether the cloud copy is up to date, and signing out. */
+function AccountSection({ onDone }: { onDone: () => void }) {
+  const user = useAuth((s) => s.user);
+  const { phase, pending, failed, lastSyncedAt, message } = useSync();
+  const [changing, setChanging] = useState(false);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const status =
+    phase === 'syncing'
+      ? 'Syncing…'
+      : phase === 'offline'
+        ? `Offline — ${pending} change${pending === 1 ? '' : 's'} waiting on this laptop`
+        : phase === 'reauth'
+          ? 'Sign-in expired — sign out and back in to keep syncing'
+          : phase === 'error'
+            ? `Problem: ${message ?? 'retrying'}`
+            : pending
+              ? `${pending} change${pending === 1 ? '' : 's'} waiting to upload`
+              : lastSyncedAt
+                ? `Up to date · synced ${formatRelative(lastSyncedAt)}`
+                : 'Up to date';
+
+  const doSignOut = async () => {
+    setBusy(true);
+    let res = await signOut();
+    if (res.pending) {
+      const ok = await confirmDialog({
+        title: 'Sign out with unsynced changes?',
+        message: `${res.pending} change${res.pending === 1 ? '' : 's'} haven’t reached your account yet (you may be offline). If you sign out now, ${res.pending === 1 ? 'it' : 'they'} will be lost.`,
+        confirmLabel: 'Sign out anyway',
+        danger: true,
+      });
+      if (!ok) {
+        setBusy(false);
+        return;
+      }
+      res = await signOut({ discard: true });
+    }
+    setBusy(false);
+    if (res.error) {
+      toast(res.error, { tone: 'error' });
+      return;
+    }
+    onDone();
+  };
+
+  const savePassword = async () => {
+    if (password.length < 8) {
+      toast('Use at least 8 characters.', { tone: 'error' });
+      return;
+    }
+    setBusy(true);
+    const err = await setNewPassword(password);
+    setBusy(false);
+    if (err) {
+      toast(err, { tone: 'error' });
+      return;
+    }
+    setChanging(false);
+    setPassword('');
+    toast('Password changed', { tone: 'success' });
+  };
+
+  return (
+    <>
+      <div className="label-display mt-3 mb-1">Account</div>
+      <Row title="Signed in" hint={user?.email ?? ''}>
+        <Button size="sm" icon={<LogOut size={14} />} disabled={busy} onClick={() => void doSignOut()}>
+          Sign out
+        </Button>
+      </Row>
+      <Row title="Cloud sync" hint={failed ? `${status}. ${failed} item${failed === 1 ? '' : 's'} refused by the cloud (often a very large image).` : status}>
+        <Button size="sm" icon={phase === 'syncing' ? <Cloud size={14} /> : <RefreshCw size={14} />} disabled={phase === 'syncing'} onClick={() => void syncNow()}>
+          Sync now
+        </Button>
+      </Row>
+      <Row title="Password" hint="Change the password you sign in with.">
+        {changing ? (
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void savePassword();
+            }}
+          >
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="New password"
+              aria-label="New password"
+              className="field h-8! w-[170px] text-[13px]"
+              autoFocus
+            />
+            <Button size="sm" variant="primary" type="submit" disabled={busy}>
+              Save
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setChanging(false)}>
+              Cancel
+            </Button>
+          </form>
+        ) : (
+          <Button size="sm" icon={<KeyRound size={14} />} onClick={() => setChanging(true)}>
+            Change
+          </Button>
+        )}
+      </Row>
+    </>
   );
 }

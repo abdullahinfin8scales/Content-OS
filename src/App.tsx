@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { Mark } from './brand/Logo';
+import { AuthGate } from './components/auth/AuthGate';
 import { AddPlatformDialog } from './components/dialogs/AddPlatformDialog';
 import { CommandPalette } from './components/dialogs/CommandPalette';
 import { ConnectPostDialog } from './components/dialogs/ConnectPostDialog';
@@ -140,8 +141,8 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
           <h1 className="text-[18px] font-semibold text-fg">{storage ? 'Local storage is unavailable' : 'Something went wrong'}</h1>
           <p className="mt-2 text-[13.5px] leading-relaxed text-fg-3">
             {storage
-              ? 'Infin8 Content OS keeps everything in your browser’s storage, which is blocked here — often by a private window or strict privacy settings. Open it in a normal window.'
-              : 'An unexpected error interrupted the app. Your saved work is safe in this browser.'}
+              ? 'Infin8 Content OS keeps a working copy of your posts in your browser’s storage, which is blocked here — often by a private window or strict privacy settings. Open it in a normal window.'
+              : 'An unexpected error interrupted the app. Your saved work is safe.'}
           </p>
           <pre className="mt-4 max-h-24 overflow-auto rounded-lg bg-sunken p-3 text-left text-[11px] text-fg-4">{String(this.state.error?.message ?? this.state.error)}</pre>
           <Button className="mt-5" variant="primary" onClick={() => window.location.reload()}>
@@ -219,6 +220,7 @@ function useAutoBackup() {
 }
 
 function Shell() {
+  useShortcuts();
   useAutoBackup();
   const route = useRoute();
   const focusMode = useUI((s) => s.focusMode);
@@ -261,13 +263,14 @@ function Shell() {
 
 export function App() {
   useTheme();
-  useShortcuts();
   usePersistentStorage();
   return (
     <ErrorBoundary>
-      <WorkspaceProvider fallback={<Splash />}>
-        <Shell />
-      </WorkspaceProvider>
+      <AuthGate fallback={<Splash />}>
+        <WorkspaceProvider fallback={<Splash />}>
+          <Shell />
+        </WorkspaceProvider>
+      </AuthGate>
     </ErrorBoundary>
   );
 }
