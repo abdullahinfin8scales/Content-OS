@@ -1,4 +1,5 @@
 import { toPlainText } from '../lib/content';
+import { PersonalError } from '../lib/personalRepo';
 import { RepoError, type NewDocInput } from '../lib/repo';
 import { navigate, parseHash, paths } from '../lib/router';
 import { outsideThread } from '../lib/tree';
@@ -42,9 +43,10 @@ function revealLocation(location: { spaceId: ID; folderId: ID | null }, ws?: Wor
   }
 }
 
-function reportError(err: unknown) {
-  const message = err instanceof RepoError ? err.message : 'Something went wrong. Please try again.';
-  if (!(err instanceof RepoError)) console.error(err);
+export function reportError(err: unknown) {
+  const known = err instanceof RepoError || err instanceof PersonalError;
+  const message = known ? err.message : 'Something went wrong. Please try again.';
+  if (!known) console.error(err);
   toast(message, { tone: 'error' });
 }
 
@@ -162,7 +164,7 @@ export async function trashItem(kind: ItemKind, id: ID, ws: Workspace) {
 
   try {
     await repo.trash(kind, id);
-    if (leave) navigate(paths.home(), { replace: true });
+    if (leave) navigate(paths.content(), { replace: true });
     toast(`${KIND_LABEL[kind]} moved to Trash`, {
       action: { label: 'Undo', run: () => void repo.restore(kind, id) },
     });

@@ -86,7 +86,7 @@ export function TrashView() {
         <div className="mx-auto w-full max-w-[860px] px-4 pt-8 pb-24 sm:px-8">
           <div className="mb-6">
             <div className="label-display mb-2">Recover anything</div>
-            <h1 className="text-[26px] leading-tight font-[680] tracking-[-0.025em] text-fg sm:text-[30px]">Trash</h1>
+            <h1 className="text-[26px] leading-tight font-[560] tracking-[-0.025em] text-fg sm:text-[30px]">Trash</h1>
             <p className="mt-1.5 text-[13px] text-fg-3">Items stay here until you delete them permanently.</p>
           </div>
           {entries.length === 0 ? (

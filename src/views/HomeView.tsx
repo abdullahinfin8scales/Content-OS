@@ -68,14 +68,14 @@ export function HomeView() {
 
   return (
     <>
-      <TopBar crumbs={[{ label: 'Home', icon: <House size={14} /> }]} />
+      <TopBar crumbs={[{ label: 'Content OS', icon: <House size={14} /> }]} />
       <div className="min-h-0 flex-1 overflow-y-auto canvas-glow">
         <div className="mx-auto w-full max-w-[1180px] px-4 pt-10 pb-24 sm:px-8 sm:pt-14">
           {/* Hero */}
           <section className="relative mb-10 overflow-hidden">
             <Mark className="pointer-events-none absolute -top-4 right-0 hidden h-[150px] w-auto text-fg opacity-[0.045] lg:block" />
             <div className="label-display mb-4">{formatLongDate(new Date())}</div>
-            <h1 className="max-w-[760px] text-[34px] leading-[1.08] font-[700] tracking-[-0.035em] text-fg sm:text-[46px]">
+            <h1 className="max-w-[760px] text-[34px] leading-[1.08] font-[560] tracking-[-0.035em] text-fg sm:text-[46px]">
               {greeting()}
               {name ? `, ${name}` : ''}.
             </h1>
@@ -190,7 +190,7 @@ function StatTile({ label, value, status, href }: { label: string; value: number
         <StatusDot status={status} />
         {label}
       </div>
-      <div className="mt-3 text-[32px] leading-none font-[650] tracking-[-0.03em] text-fg tabular-nums">{value}</div>
+      <div className="mt-3 text-[32px] leading-none font-[560] tracking-[-0.03em] text-fg tabular-nums">{value}</div>
       <span
         aria-hidden
         className="absolute -right-6 -bottom-10 h-24 w-24 rounded-full opacity-[0.08] blur-2xl transition-opacity group-hover:opacity-[0.16]"

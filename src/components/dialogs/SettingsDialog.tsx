@@ -1,4 +1,5 @@
 import { ClipboardCopy, Cloud, Download, FolderOpen, HardDrive, KeyRound, Lock, LogOut, Pencil, Plus, RefreshCw, ShieldCheck, Upload, X } from 'lucide-react';
+import { hourLabel } from '../../lib/personalText';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Mark } from '../../brand/Logo';
 import { backupFileName, BackupError, clearAll, exportBackup, parseBackup, restoreBackup } from '../../lib/backup';
@@ -52,6 +53,8 @@ function Choice<T extends string>({ value, options, onChange }: { value: T; opti
   );
 }
 
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 ** 2) return `${(n / 1024).toFixed(0)} KB`;
@@ -88,7 +91,7 @@ export function SettingsDialog() {
     const backup = await exportBackup(db);
     downloadFile(backupFileName(), JSON.stringify(backup, null, 2), 'application/json');
     settings.set({ lastBackupAt: Date.now() });
-    toast(`Backup saved — ${backup.docs.length} document${backup.docs.length === 1 ? '' : 's'}`, { tone: 'success' });
+    toast(`Backup saved — ${backup.docs.length} document${backup.docs.length === 1 ? '' : 's'}, ${backup.tasks.length} task${backup.tasks.length === 1 ? '' : 's'}, ${backup.notes.length} note${backup.notes.length === 1 ? '' : 's'}`, { tone: 'success' });
   };
 
   const doImport = async (file: File) => {
@@ -98,8 +101,9 @@ export function SettingsDialog() {
         title: 'Restore this backup?',
         message: (
           <>
-            It contains {parsed.spaces.length} space{parsed.spaces.length === 1 ? '' : 's'} and {parsed.docs.length} document
-            {parsed.docs.length === 1 ? '' : 's'}. <strong className="text-fg">Everything currently in the app{SYNC_ENABLED ? ' and in your account' : ''} will be replaced.</strong> Export a backup
+            It contains {parsed.spaces.length} space{parsed.spaces.length === 1 ? '' : 's'}, {parsed.docs.length} document
+            {parsed.docs.length === 1 ? '' : 's'}, {parsed.goals.length} goal{parsed.goals.length === 1 ? '' : 's'}, {parsed.tasks.length} task
+            {parsed.tasks.length === 1 ? '' : 's'} and {parsed.notes.length} note{parsed.notes.length === 1 ? '' : 's'}. <strong className="text-fg">Everything currently in the app{SYNC_ENABLED ? ' and in your account' : ''} will be replaced.</strong> Export a backup
             first if you are unsure.
           </>
         ),
@@ -120,8 +124,8 @@ export function SettingsDialog() {
     const ok = await confirmDialog({
       title: 'Delete all data?',
       message: SYNC_ENABLED
-        ? 'Every space, folder and document will be erased permanently — from your account and from this laptop. Export a backup first if you might need it.'
-        : 'Every space, folder and document in this browser will be erased permanently. Export a backup first if you might need it.',
+        ? 'Everything — tasks, goals, non-negotiables, journal, notes, spaces, folders and documents — will be erased permanently, from your account and from this laptop. Export a backup first if you might need it.'
+        : 'Everything in this browser — tasks, goals, non-negotiables, journal, notes, spaces, folders and documents — will be erased permanently. Export a backup first if you might need it.',
       confirmLabel: 'Erase everything',
       danger: true,
     });
@@ -153,7 +157,7 @@ export function SettingsDialog() {
       </Row>
 
       <div className="label-display mt-6 mb-1">Appearance & writing</div>
-      <Row title="Theme" hint="The infin8scale look is dark-first.">
+      <Row title="Theme" hint="Pure black or pure white. The infin8scale look is dark-first.">
         <Choice<ThemePref>
           value={settings.theme}
           onChange={(theme) => settings.set({ theme })}
@@ -174,6 +178,35 @@ export function SettingsDialog() {
             { value: 'mono', label: 'Mono' },
           ]}
         />
+      </Row>
+      <Row title="Day timeline" hint="The hours shown on each day. Tasks outside them still appear.">
+        <div className="flex items-center gap-2 text-[12.5px] text-fg-3">
+          <select
+            value={settings.dayStart}
+            onChange={(e) => settings.set({ dayStart: Math.min(Number(e.target.value), settings.dayEnd) })}
+            className="field h-8! w-[96px]! tabular-nums"
+            aria-label="Day starts at"
+          >
+            {HOURS.map((h) => (
+              <option key={h} value={h}>
+                {hourLabel(h)}
+              </option>
+            ))}
+          </select>
+          to
+          <select
+            value={settings.dayEnd}
+            onChange={(e) => settings.set({ dayEnd: Math.max(Number(e.target.value), settings.dayStart) })}
+            className="field h-8! w-[96px]! tabular-nums"
+            aria-label="Day ends at"
+          >
+            {HOURS.map((h) => (
+              <option key={h} value={h}>
+                {hourLabel(h)}
+              </option>
+            ))}
+          </select>
+        </div>
       </Row>
       <Row title="Speaking pace" hint={`Used for “spoken time” on scripts. Most creators land between 140 and 170 words per minute.`}>
         <div className="flex items-center gap-3">

@@ -166,8 +166,8 @@ function SignInScreen() {
       title={creating ? 'Create your account' : 'Sign in'}
       body={
         creating
-          ? 'Your posts are saved to this account and kept on this laptop. Password-reset emails go to this address.'
-          : 'Your posts are saved to your account and kept on this laptop, so they’re never lost when the browser is cleared.'
+          ? 'Your tasks, goals, notes and posts are saved to this account and kept on this laptop. Password-reset emails go to this address.'
+          : 'Your tasks, goals, notes and posts are saved to your account and kept on this laptop, so they’re never lost when the browser is cleared.'
       }
     >
       <form
@@ -305,7 +305,7 @@ function AccountData({ userId, email, fallback, children }: { userId: string; em
 
   if (phase === 'downloading') {
     return (
-      <Card title="Downloading your posts…" body="This happens once on each laptop. Keep this page open.">
+      <Card title="Downloading your workspace…" body="This happens once on each laptop. Keep this page open.">
         <div className="flex items-center gap-2.5 text-[13px] text-fg-3">
           <LoaderCircle size={16} className="spinner" />
           <span className="tabular-nums">{rows ? `${rows.toLocaleString()} items received` : 'Connecting…'}</span>
@@ -316,7 +316,7 @@ function AccountData({ userId, email, fallback, children }: { userId: string; em
 
   if (phase === 'failed') {
     return (
-      <Card title="Couldn’t download your posts" body={message ?? 'The cloud didn’t answer.'}>
+      <Card title="Couldn’t download your workspace" body={message ?? 'The cloud didn’t answer.'}>
         <div className="flex gap-2">
           <Button variant="primary" className="h-10! flex-1" onClick={() => setAttempt((n) => n + 1)}>
             Try again
@@ -331,10 +331,10 @@ function AccountData({ userId, email, fallback, children }: { userId: string; em
 
   return (
     <Card
-      title="This laptop has another account’s posts"
+      title="This laptop has another account’s data"
       body={
         <>
-          You signed in as <b className="text-fg">{email}</b>, but the posts on this laptop belong to a different account. They stay safe in that
+          You signed in as <b className="text-fg">{email}</b>, but the data on this laptop belongs to a different account. They stay safe in that
           account. Remove them from this laptop to continue?
           {otherPending > 0 && (
             <span className="mt-2 block text-[var(--st-drafting)]">

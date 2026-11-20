@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   CalendarDays,
   Ellipsis,
   FileText,
@@ -9,25 +10,32 @@ import {
   Lock,
   Moon,
   PanelLeftClose,
+  Pin,
   Plus,
+  Repeat,
   Search,
   Settings,
   Spool,
   SquareKanban,
+  StickyNote,
   Sun,
+  Target,
   Trash,
 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo } from 'react';
 import { Wordmark } from '../../brand/Logo';
 import type { DragItem } from '../../lib/dnd';
-import { navigate, paths, useRoute, type Route } from '../../lib/router';
+import { daysBetween } from '../../lib/dates';
+import { navigate, paths, sectionOf, useRoute, type Route, type Section } from '../../lib/router';
 import { IS_PREVIEW, SYNC_ENABLED } from '../../lib/env';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { canNestFolder, containerKey } from '../../lib/tree';
 import type { Doc, Folder, ID, Space } from '../../lib/types';
 import { appendPost, moveDocTo, moveFolderTo, openNewDocDialog } from '../../state/actions';
 import { openMenu } from '../../state/feedback';
-import { repo } from '../../state/repo';
+import { focusDay, usePersonalLists, useToday } from '../../state/personal';
+import { db, repo } from '../../state/repo';
 import { resolveTheme, useSettings } from '../../state/settings';
 import { isExpanded, useUI } from '../../state/ui';
 import { useWorkspace, type Workspace } from '../../state/workspace';
@@ -64,6 +72,12 @@ export function Sidebar() {
     set({ sidebarOpen: false });
   }, [route, set]);
 
+  const storedSection = useUI((s) => s.section);
+  const section = sectionOf(route) ?? storedSection;
+  const lists = usePersonalLists();
+  const today = useToday();
+  const todayLeft = useLiveQuery(() => db.tasks.where('date').equals(today).filter((t) => !t.done).count(), [today]);
+
   const counts = useMemo(() => {
     const content = ws.docs.filter((d) => d.kind === 'content');
     return {
@@ -78,6 +92,7 @@ export function Sidebar() {
 
   const active = activeIds(route);
   const resolved = resolveTheme(theme);
+  const pinned = (lists?.notes ?? []).filter((n) => n.pinned);
 
   return (
     <>
@@ -93,9 +108,9 @@ export function Sidebar() {
       >
         {/* Brand */}
         <div className="flex h-[60px] shrink-0 items-center gap-2 pr-2.5 pl-5">
-          <a href={paths.home()} className="group flex min-w-0 flex-1 flex-col gap-[5px] text-fg" aria-label="Infin8 Content OS — Home">
+          <a href={paths.home()} className="group flex min-w-0 flex-1 flex-col gap-[6px] text-fg" aria-label="Infin8 OS — Today">
             <Wordmark className="h-[13px] w-auto max-w-full self-start" />
-            <span className="font-display text-[7.5px] tracking-[0.42em] text-fg-3 uppercase">Content&nbsp;OS</span>
+            <span className="text-[11px] leading-none font-medium text-fg-3">Personal OS</span>
           </a>
           <IconButton
             label={desktop ? 'Hide sidebar' : 'Close menu'}
@@ -107,8 +122,13 @@ export function Sidebar() {
           </IconButton>
         </div>
 
+        {/* Section switch */}
+        <div className="px-3 pb-3">
+          <SectionSwitch section={section} />
+        </div>
+
         {/* Search + create */}
-        <div className="space-y-2 px-3 pt-1 pb-3">
+        <div className="space-y-2 px-3 pb-3">
           <button
             onClick={() => set({ paletteOpen: true })}
             className="flex h-9 w-full items-center gap-2.5 rounded-[10px] border border-line bg-sunken px-3 text-[13px] text-fg-3 transition-colors hover:border-line-strong hover:text-fg-2"
@@ -118,42 +138,101 @@ export function Sidebar() {
             <span className="kbd">{MOD} K</span>
           </button>
           <button
-            onClick={() => openNewDocDialog()}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-[10px] bg-brand text-[13px] font-semibold text-brand-fg shadow-[0_1px_0_0_rgb(255_255_255/0.3)_inset,0_8px_20px_-10px_rgb(0_0_0/0.8)] transition-opacity hover:opacity-90"
+            onClick={() => (section === 'personal' ? focusDay('task') : openNewDocDialog())}
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-[10px] bg-brand text-[13px] font-medium text-brand-fg transition-opacity hover:opacity-90"
           >
-            <Plus size={16} strokeWidth={2.4} />
-            New document
+            <Plus size={16} strokeWidth={2.2} />
+            {section === 'personal' ? 'Add a task' : 'New document'}
           </button>
         </div>
 
-        {/* Primary nav */}
-        <nav className="space-y-px px-3 pb-2">
-          <NavItem href={paths.home()} icon={House} label="Home" active={route.name === 'home'} />
-          <NavItem href={paths.library()} icon={Library} label="Library" active={route.name === 'library'} count={counts.library} />
-          <NavItem href={paths.pipeline()} icon={SquareKanban} label="Pipeline" active={route.name === 'pipeline'} count={counts.pipeline} />
-          <NavItem href={paths.calendar()} icon={CalendarDays} label="Calendar" active={route.name === 'calendar'} />
-        </nav>
+        {section === 'personal' ? (
+          <>
+            <nav className="space-y-px px-3 pb-2" aria-label="Personal">
+              <NavItem href={paths.home()} icon={Sun} label="Today" active={route.name === 'home'} count={todayLeft || undefined} />
+              <NavItem href={paths.goals()} icon={Target} label="Goals" active={route.name === 'goals' || route.name === 'goal'} count={lists?.activeGoals.length || undefined} />
+              <NavItem href={paths.nonnegotiables()} icon={Repeat} label="Non-negotiables" active={route.name === 'nonnegotiables'} count={lists?.activeNonnegs.length || undefined} />
+              <NavItem href={paths.journal()} icon={BookOpen} label="Journal" active={route.name === 'journal'} />
+              <NavItem href={paths.notes()} icon={StickyNote} label="Notes" active={route.name === 'notes' || route.name === 'note'} count={lists?.notes.length || undefined} />
+            </nav>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-4">
+              {lists && lists.activeGoals.length > 0 && (
+                <div className="mb-4">
+                  <div className="pb-1.5 pl-2.5">
+                    <span className="label-display">Goals</span>
+                  </div>
+                  {lists.activeGoals.map((g) => {
+                    const d = daysBetween(today, g.targetDate);
+                    return (
+                      <a
+                        key={g.id}
+                        href={paths.goal(g.id)}
+                        aria-current={route.name === 'goal' && route.id === g.id ? 'page' : undefined}
+                        className={cx(
+                          'flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors',
+                          route.name === 'goal' && route.id === g.id ? 'bg-active text-fg' : 'text-fg hover:bg-hover',
+                        )}
+                      >
+                        <span className="flex-1 truncate">{g.title}</span>
+                        <span className={cx('text-[11.5px] tabular-nums', d < 0 ? 'text-danger' : 'text-fg-4')}>{d < 0 ? 'over' : d === 0 ? 'today' : `${d}d`}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+              {pinned.length > 0 && (
+                <div>
+                  <div className="pb-1.5 pl-2.5">
+                    <span className="label-display">Pinned notes</span>
+                  </div>
+                  {pinned.map((n) => (
+                    <a
+                      key={n.id}
+                      href={paths.note(n.id)}
+                      className={cx(
+                        'flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors',
+                        route.name === 'note' && route.id === n.id ? 'bg-active text-fg' : 'text-fg hover:bg-hover',
+                      )}
+                    >
+                      <Pin size={13} className="shrink-0 text-fg-3" />
+                      <span className="flex-1 truncate">{n.title || 'Untitled'}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <nav className="space-y-px px-3 pb-2" aria-label="Content OS">
+              <NavItem href={paths.content()} icon={House} label="Overview" active={route.name === 'content'} />
+              <NavItem href={paths.library()} icon={Library} label="Library" active={route.name === 'library'} count={counts.library} />
+              <NavItem href={paths.pipeline()} icon={SquareKanban} label="Pipeline" active={route.name === 'pipeline'} count={counts.pipeline} />
+              <NavItem href={paths.calendar()} icon={CalendarDays} label="Calendar" active={route.name === 'calendar'} />
+            </nav>
 
-        {/* Spaces */}
-        <div className="flex items-center justify-between pt-4 pr-3 pb-1.5 pl-5">
-          <span className="label-display">Spaces</span>
-          <IconButton label="New space" size="xs" onClick={() => set({ spaceDialog: {} })}>
-            <Plus size={14} />
-          </IconButton>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" role="tree" aria-label="Spaces">
-          {ws.spaces.length === 0 ? (
-            <button
-              onClick={() => set({ spaceDialog: {} })}
-              className="mt-1 flex w-full flex-col items-start gap-1 rounded-xl border border-dashed border-line-strong p-3.5 text-left transition-colors hover:bg-hover"
-            >
-              <span className="text-[13px] font-medium text-fg">Create your first space</span>
-              <span className="text-[12px] leading-snug text-fg-3">A space holds folders and documents — one per brand, client or channel.</span>
-            </button>
-          ) : (
-            ws.spaces.map((space) => <SpaceNode key={space.id} space={space} ws={ws} active={active} />)
-          )}
-        </div>
+            {/* Spaces */}
+            <div className="flex items-center justify-between pt-4 pr-3 pb-1.5 pl-5">
+              <span className="label-display">Spaces</span>
+              <IconButton label="New space" size="xs" onClick={() => set({ spaceDialog: {} })}>
+                <Plus size={14} />
+              </IconButton>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4" role="tree" aria-label="Spaces">
+              {ws.spaces.length === 0 ? (
+                <button
+                  onClick={() => set({ spaceDialog: {} })}
+                  className="mt-1 flex w-full flex-col items-start gap-1 rounded-xl border border-dashed border-line-strong p-3.5 text-left transition-colors hover:bg-hover"
+                >
+                  <span className="text-[13px] font-medium text-fg">Create your first space</span>
+                  <span className="text-[12px] leading-snug text-fg-3">A space holds folders and documents — one per brand, client or channel.</span>
+                </button>
+              ) : (
+                ws.spaces.map((space) => <SpaceNode key={space.id} space={space} ws={ws} active={active} />)
+              )}
+            </div>
+          </>
+        )}
 
         {/* Footer */}
         <div className="shrink-0 border-t border-line px-3 pt-2 pb-3">
@@ -192,6 +271,33 @@ export function Sidebar() {
         </div>
       </aside>
     </>
+  );
+}
+
+/** Switches between the Personal and Content OS sections, returning to the last page used in each. */
+function SectionSwitch({ section }: { section: Section }) {
+  const lastHash = useUI((s) => s.lastHash);
+  const options: { value: Section; label: string; home: string }[] = [
+    { value: 'personal', label: 'Personal', home: paths.home() },
+    { value: 'content', label: 'Content OS', home: paths.content() },
+  ];
+  return (
+    <div role="tablist" aria-label="Section" className="grid grid-cols-2 gap-0.5 rounded-[10px] border border-line p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          role="tab"
+          aria-selected={section === o.value}
+          onClick={() => navigate(section === o.value ? o.home : lastHash[o.value] || o.home)}
+          className={cx(
+            'h-7 rounded-lg text-[12.5px] font-medium transition-colors',
+            section === o.value ? 'bg-active text-fg ring-1 ring-line-strong' : 'text-fg-3 hover:text-fg',
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

@@ -6,7 +6,7 @@ Mistakes made while building this project, each turned into a rule. Every agent 
 
 1. **Check push access first.** Run `git push --dry-run origin HEAD` before significant work; if refused, tell the user immediately and keep a downloadable copy of the commits. → [001](001-push-access-not-checked.md)
 2. **No demo or sample data** in the user's workspace unless they ask. Guide with empty states instead. → [002](002-demo-content-without-asking.md)
-3. **Michroma is for short uppercase labels only.** Numbers use Inter with `tabular-nums` (Michroma's zero looks like an empty box). → [003](003-display-font-for-numbers.md)
+3. **Check a font's digits before using it for numbers.** Numbers and times use Geist with `tabular-nums`; times go through `clockLabel` (locale 12/24-hour). → [003](003-display-font-for-numbers.md)
 4. **Check CSS specificity before broad resets** in `src/styles/index.css`, then look at a template document in a real browser. → [004](004-css-specificity-wiped-heading-spacing.md)
 5. **Title → body focus lands on the first empty paragraph** after leading headings (`focusBodyFromTitle`). Test the editor with templates, not just blank docs. → [005](005-enter-from-title-into-heading.md)
 6. **TipTap's focus command is async.** Call `editor.view.focus()` synchronously before `editor.commands.focus(...)`. → [006](006-tiptap-focus-is-async.md)

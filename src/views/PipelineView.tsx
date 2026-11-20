@@ -61,7 +61,7 @@ export function PipelineView() {
         <div className="flex flex-wrap items-end gap-x-6 gap-y-4 px-4 pt-8 pb-5 sm:px-8">
           <div className="min-w-0 flex-1">
             <div className="label-display mb-2">From idea to posted</div>
-            <h1 className="text-[26px] leading-tight font-[680] tracking-[-0.025em] text-fg sm:text-[30px]">Pipeline</h1>
+            <h1 className="text-[26px] leading-tight font-[560] tracking-[-0.025em] text-fg sm:text-[30px]">Pipeline</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <label className="relative flex h-8 w-[200px] items-center">

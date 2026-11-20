@@ -61,7 +61,7 @@ async function insertImages(editor: Editor, files: File[], pos?: number) {
   }
 }
 
-export function buildExtensions(handlers: { onLink: () => boolean; onSave: () => boolean }) {
+export function buildExtensions(handlers: { onLink: () => boolean; onSave: () => boolean }, opts: { placeholder?: string } = {}) {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
@@ -74,7 +74,7 @@ export function buildExtensions(handlers: { onLink: () => boolean; onSave: () =>
       includeChildren: true,
       placeholder: ({ editor, node }) => {
         if (node.type.name === 'paragraph' && typeof node.attrs.hint === 'string' && node.attrs.hint) return node.attrs.hint;
-        if (editor.isEmpty) return 'Start writing…';
+        if (editor.isEmpty) return opts.placeholder ?? 'Start writing…';
         if (node.type.name === 'heading') return 'Heading';
         return '';
       },

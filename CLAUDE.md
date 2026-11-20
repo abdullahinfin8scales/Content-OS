@@ -1,4 +1,4 @@
-# Infin8 Content OS — instructions for agents
+# Infin8 OS (formerly Infin8 Content OS) — instructions for agents
 
 Read this whole file before doing any work. It includes two logs that are part of these instructions:
 
@@ -19,8 +19,13 @@ If the two lists below are not shown inline, open `docs/mistakes/README.md` and 
 
 ## The project
 
-- A private writing and archive space for one creator's social media content. The UI follows the infin8scale identity: monochrome, dark-first; brand colours will come from the user later.
+- One person's private OS, in two sections switched from the top of the sidebar:
+  - **Personal** (`#`, the start page): **Today** (an hour timeline for the day), **Goals** (deadlines, a "why", optional number to reach), **Non-negotiables** (daily commitments, each at a set time, copied onto every day automatically), **Journal** (the day's thoughts) and **Notes**.
+  - **Content OS** (`#content`): the original writing and archive space for social media content (library, pipeline, calendar, spaces).
+  - More sections (e.g. Work) are expected later: add routes to `sectionOf` in `src/lib/router.ts` and a branch in the sidebar.
+- Look, by the user's rule: **pure black (#000) with pure white text in dark mode, pure white (#fff) with pure black text in light mode.** Only small hints (dates, placeholders, counts) may be grey (`--fg-3`, `--fg-4`); never make main text or surfaces off-white or near-black. Type is **Geist** / Geist Mono, soft weights (400 body, 500–560 headings, never above 600).
 - Stack: React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4, TipTap 3 (editor), Dexie 4 (IndexedDB), Zustand, Supabase (auth + cloud copy), Vitest.
+- The display name is **Infin8 OS**, but the Netlify site, the URL, the Dexie database name (`infin8-content-os`), the backup `app` id and the backup file names keep their old names on purpose: data is tied to them (mistakes 012, 013).
 - Live app: https://infin8-content-os.netlify.app (Netlify site `infin8-content-os`, id `ff4fa68f-aed1-4e7f-9570-9a61c4cf60bd`).
 - Accounts: email + password, no email confirmation. Sign-up stays open by the user's choice ("keep it simple; if someone signs up, they just get their own space"); row-level security gives every account its own empty workspace. Don't lock sign-up or add hardening unless the user asks.
 - Data: local-first. The browser's IndexedDB is the working copy (fast, works offline); every change is synced to the owner's Supabase account in the background. Extra safety: automatic folder backups (`src/state/backup.ts`) and JSON export/restore. The free Supabase plan has no automatic backups and pauses after 7 days without use.
@@ -29,6 +34,8 @@ If the two lists below are not shown inline, open `docs/mistakes/README.md` and 
 ## Cloud sync and accounts
 
 - `supabase/migrations/`: the database. One `records` table (kind, id, data jsonb, deleted, updated_at, server_updated_at), owner-only row-level security, and two functions: `push_records` (last write wins; returns the server's row when it kept a newer one) and `pull_records` (keyset pages). Change the schema only with a new migration file, applied to both projects.
+- Record kinds: `space`, `folder`, `doc`, `content`, `platform`, and the personal ones `nonneg`, `task`, `goal`, `journal`, `note` (migration `0002_personal_records.sql` widens the `records_kind_check` constraint). **A new kind needs its migration applied before the app version that writes it is deployed**: Postgres fails the whole upload batch on one bad kind, which would stall all syncing.
+- A day's copies of the non-negotiables (task ids `nn-<nnId>-<date>`) are derived data: each device builds them in `PersonalRepo.ensureDay` through `withoutUpload`, and they upload only when the user ticks one. Keep it that way, or an unsynced device could undo a tick made on another.
 - `src/sync/outbox.ts`: Dexie middleware that queues every write to a synced table in `outbox`, inside the same transaction. Writes that must not upload (downloaded rows, clearing the laptop on sign-out) go through `withoutUpload`. Don't add `await` before calling down in the middleware: Dexie's layers need the transaction context (use `Dexie.Promise`).
 - `src/sync/engine.ts`: push/pull/apply, claiming pre-account data on first sign-in (`prepareForUser`), `clearLocal`. Pure logic, tested in `tests/sync.test.ts` against a fake server that mirrors the SQL.
 - `src/state/sync.ts` (when to sync, status), `src/state/auth.ts` (session, sign in/up/out, password reset), `src/components/auth/AuthGate.tsx` (screens in front of the app).
@@ -64,11 +71,14 @@ Run `npm test` and `npm run build` before every commit. Check UI changes in a re
 
 ## Code map
 
-- `src/lib/repo.ts`: every data write (cascading trash, folder moves, no folder cycles). Change data rules here and in `tests/`.
+- `src/lib/repo.ts`: every Content OS data write (cascading trash, folder moves, no folder cycles). Change data rules here and in `tests/`.
+- `src/lib/personalRepo.ts`: every personal write (non-negotiables and their day copies, tasks, goals, journal, notes), tested in `tests/personal.test.ts`. `src/lib/personalText.ts`: task-time parsing ("Call Sara at 3pm"), clock labels (locale 12/24-hour), days-left labels.
+- `src/state/personal.ts`: personal live queries and hooks (`useToday`, `usePersonalLists`, `usePersonalUpkeep` keeps today's timeline built), `focusDay`.
+- `src/views/personal/`: Today/day timeline (`DayView`), Non-negotiables, Goals, Goal, Journal, Notes; `RichNote` is the slim editor used by the journal and notes.
 - `src/lib/content.ts`: rich text → plain text and Markdown (`toPlainText` is what gets posted).
 - `src/state/`: workspace live query, UI and settings stores, actions, automatic backup.
 - `src/editor/`: document page, toolbar, details panel, teleprompter.
-- `src/views/`: home, library/space/folder, pipeline, calendar, trash.
+- `src/views/`: Content OS overview (`HomeView`, at `#content`), library/space/folder, pipeline, calendar, trash.
 - `src/styles/index.css`: colour tokens (dark on `:root`, light via media query and `data-theme`) and editor typography.
 - `src/lib/env.ts`: `IS_PREVIEW` gates claude.ai-preview differences; `LIVE_URL` is the permanent address; `SYNC_ENABLED` turns accounts and sync on when Supabase is configured.
 - `public/_headers`: security headers and caching for Netlify.

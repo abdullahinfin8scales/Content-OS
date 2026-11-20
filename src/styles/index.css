@@ -386,6 +386,14 @@
   min-height: 50vh;
   padding-bottom: 30vh;
 }
+/* Short inline editors (the day's journal). */
+.prose-editor.is-compact {
+  --doc-size: 15.5px;
+}
+.prose-editor.is-compact .ProseMirror {
+  min-height: 7em;
+  padding-bottom: 1.5em;
+}
 .prose-editor p {
   margin: 0;
 }

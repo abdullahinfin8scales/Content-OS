@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   CalendarDays,
   CornerDownLeft,
   FilePlus,
@@ -8,16 +9,23 @@ import {
   House,
   LayoutGrid,
   Library,
+  ListPlus,
   Moon,
+  Repeat,
   Search,
   Settings,
   SquareKanban,
+  StickyNote,
+  Sun,
+  Target,
   Trash,
 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { navigate, paths } from '../../lib/router';
 import { db } from '../../state/repo';
 import { defaultLocation, newFolder, openNewDocDialog, quickNewDoc } from '../../state/actions';
+import { focusDay, newNote } from '../../state/personal';
 import { resolveTheme, useSettings } from '../../state/settings';
 import { useUI } from '../../state/ui';
 import { useWorkspace, type Workspace } from '../../state/workspace';
@@ -66,13 +74,21 @@ function buildActions(ws: Workspace, close: () => void): Omit<Result, 'score'>[]
   };
   const loc = defaultLocation(ws);
   return [
-    { id: 'a:new', group: 'Actions', label: 'New document', detail: 'Blank', icon: <FilePlus size={15} />, run: () => (close(), void quickNewDoc(ws)) },
+    { id: 'a:task', group: 'Actions', label: 'Add a task', detail: 'Today', icon: <ListPlus size={15} />, run: () => (close(), focusDay('task')) },
+    { id: 'a:note', group: 'Actions', label: 'New note', icon: <StickyNote size={15} />, run: () => (close(), void newNote()) },
+    { id: 'a:journal', group: 'Actions', label: 'Write in today’s journal', icon: <BookOpen size={15} />, run: () => (close(), focusDay('journal')) },
+    { id: 'a:new', group: 'Actions', label: 'New document', detail: 'Content OS', icon: <FilePlus size={15} />, run: () => (close(), void quickNewDoc(ws)) },
     { id: 'a:tpl', group: 'Actions', label: 'New from template…', icon: <LayoutGrid size={15} />, run: () => (close(), openNewDocDialog()) },
     ...(loc
       ? [{ id: 'a:folder', group: 'Actions', label: 'New folder', icon: <FolderPlus size={15} />, run: () => (close(), void newFolder(loc.spaceId, loc.folderId, ws)) }]
       : []),
     { id: 'a:space', group: 'Actions', label: 'New space', icon: <SpaceGlyph space={{ icon: 'sparkles', color: 'white' }} size="sm" />, run: () => (close(), set({ spaceDialog: {} })) },
-    { id: 'g:home', group: 'Go to', label: 'Home', icon: <House size={15} />, run: go(paths.home()) },
+    { id: 'g:today', group: 'Go to', label: 'Today', icon: <Sun size={15} />, run: go(paths.home()) },
+    { id: 'g:goals', group: 'Go to', label: 'Goals', icon: <Target size={15} />, run: go(paths.goals()) },
+    { id: 'g:nonneg', group: 'Go to', label: 'Non-negotiables', icon: <Repeat size={15} />, run: go(paths.nonnegotiables()) },
+    { id: 'g:journal', group: 'Go to', label: 'Journal', icon: <BookOpen size={15} />, run: go(paths.journal()) },
+    { id: 'g:notes', group: 'Go to', label: 'Notes', icon: <StickyNote size={15} />, run: go(paths.notes()) },
+    { id: 'g:home', group: 'Go to', label: 'Content OS overview', icon: <House size={15} />, run: go(paths.content()) },
     { id: 'g:library', group: 'Go to', label: 'Library', icon: <Library size={15} />, run: go(paths.library()) },
     { id: 'g:pipeline', group: 'Go to', label: 'Pipeline', icon: <SquareKanban size={15} />, run: go(paths.pipeline()) },
     { id: 'g:calendar', group: 'Go to', label: 'Calendar', icon: <CalendarDays size={15} />, run: go(paths.calendar()) },
@@ -100,6 +116,8 @@ export function CommandPalette() {
   const [active, setActive] = useState(0);
   const [texts, setTexts] = useState<Map<string, string> | null>(null);
   const list = useRef<HTMLDivElement>(null);
+  // Personal items to search: notes and goals (titles and excerpts).
+  const personalItems = useLiveQuery(async () => (open ? { notes: await db.notes.toArray(), goals: await db.goals.toArray() } : null), [open]);
 
   const close = () => set({ paletteOpen: false });
 
@@ -186,16 +204,33 @@ export function CommandPalette() {
       if (s > 0)
         out.push({ id: sp.id, group: 'Spaces', label: sp.name, icon: <SpaceGlyph space={sp} size="sm" />, run: () => (close(), navigate(paths.space(sp.id))), score: s });
     }
+    for (const g of personalItems?.goals ?? []) {
+      const s = score(g.title, q);
+      if (s > 0) out.push({ id: g.id, group: 'Goals', label: g.title, icon: <Target size={15} />, run: () => (close(), navigate(paths.goal(g.id))), score: s });
+    }
+    for (const n of personalItems?.notes ?? []) {
+      const s = Math.max(score(n.title || 'Untitled', q), q.length >= 2 && n.excerpt.toLowerCase().includes(q.toLowerCase()) ? 30 : 0);
+      if (s > 0)
+        out.push({
+          id: n.id,
+          group: 'Notes',
+          label: n.title || 'Untitled',
+          detail: n.excerpt ? snippet(n.excerpt, q) || n.excerpt.slice(0, 80) : undefined,
+          icon: <StickyNote size={15} />,
+          run: () => (close(), navigate(paths.note(n.id))),
+          score: s,
+        });
+    }
     for (const a of actions) {
       const s = score(a.label, q);
       if (s > 0) out.push({ ...a, score: s - 5 });
     }
-    const order = ['Documents', 'Spaces', 'Folders', 'Actions', 'Go to', 'Found in text'];
+    const order = ['Goals', 'Notes', 'Documents', 'Spaces', 'Folders', 'Actions', 'Go to', 'Found in text'];
     return out
       .sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group) || b.score - a.score)
       .slice(0, 40);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, query, ws, texts]);
+  }, [open, query, ws, texts, personalItems]);
 
   useEffect(() => {
     list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -226,7 +261,7 @@ export function CommandPalette() {
               results[active]?.run();
             }
           }}
-          placeholder="Search documents, folders, spaces — or run a command"
+          placeholder="Search notes, goals, documents — or run a command"
           className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-4"
           aria-label="Search"
         />

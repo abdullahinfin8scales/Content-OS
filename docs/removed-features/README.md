@@ -10,6 +10,7 @@ Features taken out of the app, and why. Every agent session loads this list auto
 | [004](004-downloads-and-printing-in-preview.md) | 2026-11-09 | Downloads, printing and pop-up links (claude.ai preview only) | The preview sandbox blocks them | "Copy backup" and normal links; the real app keeps them all |
 | [005](005-slash-path-links.md) | 2026-11-09 | `#/doc/<id>` style links | Hosts only pass plain `#name` hashes | `#doc-<id>` links (old ones still open) |
 | [006](006-dashboard-on-empty-workspace.md) | 2026-11-10 | Full dashboard on an empty workspace | Rows of zeros on the first screen | First-space form and "How it fits together" until the first document exists |
+| [007](007-michroma-labels-and-content-home.md) | 2026-11-20 | Michroma labels, Inter, near-black/off-white surfaces, Content OS as the start page | The user asked for soft fonts and pure black/white, and merged Task OS in | Geist, pure #000/#fff tokens, Today at `#`, Content OS Overview at `#content` |
 
 ## Adding an entry
 

@@ -62,7 +62,7 @@ export function CalendarView() {
           <div className="mb-5 flex flex-wrap items-end gap-x-6 gap-y-3">
             <div className="min-w-0 flex-1">
               <div className="label-display mb-2">{monthCount ? `${monthCount} planned or posted` : 'Publishing calendar'}</div>
-              <h1 className="text-[26px] leading-tight font-[680] tracking-[-0.025em] text-fg sm:text-[30px]">{formatMonthYear(month)}</h1>
+              <h1 className="text-[26px] leading-tight font-[560] tracking-[-0.025em] text-fg sm:text-[30px]">{formatMonthYear(month)}</h1>
             </div>
             <div className="flex items-center gap-1">
               <IconButton label="Previous month" onClick={() => setMonth((m) => addMonths(m, -1))}>

@@ -1,3 +1,4 @@
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Component, lazy, Suspense, useEffect, useRef, type ReactNode } from 'react';
 import { Mark } from './brand/Logo';
 import { AuthGate } from './components/auth/AuthGate';
@@ -15,10 +16,12 @@ import { EmptyState } from './components/ui/EmptyState';
 import { ConfirmHost, MenuHost, ToastHost, TooltipHost } from './components/ui/Hosts';
 import { IS_PREVIEW, LIVE_URL } from './lib/env';
 import { SAVE_EVENT } from './lib/events';
-import { navigate, parseHash, paths, useRoute, type Route } from './lib/router';
+import { navigate, parseHash, paths, sectionOf, useRoute, type Route } from './lib/router';
 import { openNewDocDialog } from './state/actions';
 import { initAutoBackup, notifyContentChanged } from './state/backup';
 import { useConfirm, useMenu } from './state/feedback';
+import { focusDay, newNote, usePersonalUpkeep } from './state/personal';
+import { db } from './state/repo';
 import { resolveTheme, useSettings } from './state/settings';
 import { useUI } from './state/ui';
 import { useWorkspace, WorkspaceProvider } from './state/workspace';
@@ -28,6 +31,12 @@ import { HomeView } from './views/HomeView';
 import { PipelineView } from './views/PipelineView';
 import { ThreadView } from './views/ThreadView';
 import { TrashView } from './views/TrashView';
+import { DayView } from './views/personal/DayView';
+import { GoalsView } from './views/personal/GoalsView';
+import { GoalView } from './views/personal/GoalView';
+import { JournalView } from './views/personal/JournalView';
+import { NonNegotiablesView } from './views/personal/NonNegotiablesView';
+import { NotesView, NoteView } from './views/personal/NotesView';
 
 // The editor (ProseMirror + TipTap) is most of the bundle; load it on demand.
 const DocView = lazy(() => import('./editor/DocView'));
@@ -96,7 +105,10 @@ function useShortcuts() {
         ui.set({ focusMode: false });
       } else if (!mod && !e.altKey && key === 'n' && !isTyping(e.target) && !dialogOpen && !ui.paletteOpen) {
         e.preventDefault();
-        openNewDocDialog();
+        const section = sectionOf(parseHash(window.location.hash)) ?? ui.section;
+        if (section === 'content') openNewDocDialog();
+        else if (e.shiftKey) void newNote();
+        else focusDay('task');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -158,6 +170,22 @@ function RouteView({ route }: { route: Route }) {
   const ws = useWorkspace();
   switch (route.name) {
     case 'home':
+      return <DayView key="today" />;
+    case 'day':
+      return <DayView key={route.date} date={route.date} />;
+    case 'goals':
+      return <GoalsView />;
+    case 'goal':
+      return <GoalView key={route.id} id={route.id} />;
+    case 'nonnegotiables':
+      return <NonNegotiablesView />;
+    case 'journal':
+      return <JournalView />;
+    case 'notes':
+      return <NotesView />;
+    case 'note':
+      return <NoteView key={route.id} id={route.id} />;
+    case 'content':
       return <HomeView />;
     case 'doc':
       return (
@@ -203,26 +231,56 @@ function RouteView({ route }: { route: Route }) {
   );
 }
 
-/** Restores the backup folder and reports every content change to it. */
+/** Restores the backup folder and reports every content and personal change to it. */
 function useAutoBackup() {
   const ws = useWorkspace();
   const first = useRef(true);
+  // A cheap fingerprint of the personal tables: changes whenever anything in them does.
+  const personalStamp = useLiveQuery(async () => {
+    const tables = [db.nonnegs, db.tasks, db.goals, db.journal, db.notes] as const;
+    const parts = await Promise.all(
+      tables.map(async (t) => {
+        let latest = 0;
+        let count = 0;
+        await t.each((r: { updatedAt: number }) => {
+          count++;
+          if (r.updatedAt > latest) latest = r.updatedAt;
+        });
+        return `${count}:${latest}`;
+      }),
+    );
+    return parts.join('|');
+  }, []);
   useEffect(() => {
     void initAutoBackup();
   }, []);
   useEffect(() => {
+    if (personalStamp === undefined) return;
     if (first.current) {
       first.current = false;
       return;
     }
     notifyContentChanged();
-  }, [ws]);
+  }, [ws, personalStamp]);
+}
+
+/** Remembers the section (Personal / Content OS) and the last page opened in each. */
+function useSectionMemory(route: Route) {
+  useEffect(() => {
+    const section = sectionOf(route);
+    if (!section) return;
+    const ui = useUI.getState();
+    const hash = window.location.hash || '#';
+    if (ui.section !== section || ui.lastHash[section] !== hash) ui.set({ section, lastHash: { ...ui.lastHash, [section]: hash } });
+  }, [route]);
 }
 
 function Shell() {
   useShortcuts();
   useAutoBackup();
+  usePersonalUpkeep();
   const route = useRoute();
+  useSectionMemory(route);
   const focusMode = useUI((s) => s.focusMode);
   const sidebarHidden = useUI((s) => s.sidebarHidden);
   const showSidebar = !focusMode;

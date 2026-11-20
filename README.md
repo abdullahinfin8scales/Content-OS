@@ -1,6 +1,23 @@
-# Infin8 Content OS
+# Infin8 OS
 
 **Live:** https://infin8-content-os.netlify.app
+
+A personal OS in two sections:
+
+- **Personal** — goals with deadlines, a daily timeline of tasks, daily non-negotiables that appear on every day at their time, a journal for the day's thoughts, and notes.
+- **Content OS** — a private writing and archive space for social media content (below).
+
+Pure black / pure white, set in Geist. Switch sections at the top of the sidebar.
+
+## Personal
+
+- **Today** (`#`): the day as an hour timeline. Non-negotiables sit at their time; your own tasks go in between ("Call Sara at 3pm" lands at 3 PM), and tasks without a time go under **Anytime**. A "now" line marks the current time. Active goals show at the top as your daily reminder, with days left. Unfinished tasks from yesterday can be moved over in one click. The day's journal is at the bottom.
+- **Non-negotiables**: add or remove them in one place. Changes apply to today and later days; past days keep their history. Each shows its last 7 days.
+- **Goals**: a title, a date to reach it by, why it matters, and optionally a number to reach (e.g. 4,200 / 10,000 followers). Link any task to a goal; the goal page lists its steps.
+- **Journal** and **Notes**: rich text, saved as you type.
+- Shortcuts: **N** adds a task (in Content OS: a new document), **Shift N** a new note, **Ctrl K** searches notes, goals and documents.
+
+## Content OS
 
 A private writing and archive space for social media content, styled in the infin8scale identity. Write scripts and posts in a Google-Docs-style editor, organise them into **spaces → folders → documents**, track each piece from idea to posted, and keep an archive of everything you publish with its link and numbers.
 

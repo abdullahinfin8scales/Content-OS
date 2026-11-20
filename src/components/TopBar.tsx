@@ -81,7 +81,7 @@ export function PageHeader({
         {icon}
         <div className="min-w-0">
           {eyebrow && <div className="label-display mb-2">{eyebrow}</div>}
-          <h1 className="truncate text-[26px] leading-tight font-[680] tracking-[-0.025em] text-fg sm:text-[30px]">{title}</h1>
+          <h1 className="truncate text-[26px] leading-tight font-[560] tracking-[-0.025em] text-fg sm:text-[30px]">{title}</h1>
           {meta && <div className="mt-1.5 text-[13px] text-fg-3">{meta}</div>}
         </div>
       </div>

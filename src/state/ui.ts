@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Section } from '../lib/router';
 import type { ID, Status } from '../lib/types';
 
 export interface DocLocation {
@@ -40,6 +41,12 @@ interface UIState {
   expanded: Record<ID, boolean>;
   lastLocation: DocLocation | null;
   libraryLayout: 'list' | 'grid';
+  /** The sidebar section being shown: Personal or Content OS. */
+  section: Section;
+  /** The last page opened in each section, so switching sections goes back to it. */
+  lastHash: Record<Section, string>;
+  /** Asks the day view to focus "Add a task" or the journal (honoured for a moment after `at`). */
+  dayFocus: { target: 'task' | 'journal'; at: number } | null;
   set: (patch: Partial<Omit<UIState, 'set' | 'setExpanded'>>) => void;
   setExpanded: (id: ID, value: boolean) => void;
 }
@@ -62,6 +69,9 @@ export const useUI = create<UIState>()(
       expanded: {},
       lastLocation: null,
       libraryLayout: 'list',
+      section: 'personal',
+      lastHash: { personal: '#', content: '#content' },
+      dayFocus: null,
       set: (patch) => set(patch),
       setExpanded: (id, value) => set((s) => ({ expanded: { ...s.expanded, [id]: value } })),
     }),
@@ -74,6 +84,7 @@ export const useUI = create<UIState>()(
         expanded: s.expanded,
         lastLocation: s.lastLocation,
         libraryLayout: s.libraryLayout,
+        lastHash: s.lastHash,
       }),
     },
   ),

@@ -11,6 +11,9 @@ interface SettingsState {
   /** Speaking pace used for "spoken time" estimates. */
   wpm: number;
   defaultFont: DocFont;
+  /** The day timeline's first and last hour (0–23). */
+  dayStart: number;
+  dayEnd: number;
   /** When the last backup (export or automatic) was written. */
   lastBackupAt: number | null;
   /** Home's backup reminder was dismissed at this time. */
@@ -27,6 +30,8 @@ export const useSettings = create<SettingsState>()(
       displayName: '',
       wpm: 150,
       defaultFont: 'sans',
+      dayStart: 6,
+      dayEnd: 23,
       lastBackupAt: null,
       backupNudgeDismissedAt: null,
       set: (patch) => set(patch),

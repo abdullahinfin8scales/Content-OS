@@ -60,7 +60,7 @@ export default function DocView({ id }: { id: ID }) {
         <EmptyState
           title="This document doesn’t exist"
           body="It may have been deleted permanently, or the link is wrong."
-          action={<Button onClick={() => navigate(paths.home())}>Go home</Button>}
+          action={<Button onClick={() => navigate(paths.content())}>Go to Content OS</Button>}
         />
       </>
     );
