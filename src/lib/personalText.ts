@@ -73,6 +73,53 @@ export function hourLabel(hour: number): string {
   return clockLabel(`${pad(hour)}:00`, { compact: true });
 }
 
+/**
+ * Reads a time typed into the time picker: "6", "6pm", "6:30 pm", "630pm",
+ * "18:30", "0630", "6p". Without am/pm the hour is read on a 24-hour clock.
+ * Returns HH:MM, or null when it isn't a time.
+ */
+export function parseTimeText(input: string): string | null {
+  const t = input.trim().toLowerCase().replace(/\./g, '').replace(/\s+/g, '');
+  const m = t.match(/^(\d{1,2})(?::?(\d{2}))?(am|pm|a|p)?$/);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = m[2] ? Number(m[2]) : 0;
+  const ampm = m[3];
+  if (min > 59) return null;
+  if (ampm) {
+    if (h < 1 || h > 12) return null;
+    const pm = ampm.startsWith('p');
+    if (pm && h !== 12) h += 12;
+    if (!pm && h === 12) h = 0;
+  } else if (h > 23) {
+    return null;
+  }
+  return `${pad(h)}:${pad(min)}`;
+}
+
+/** Every quarter hour of the day, as HH:MM — the picker's list. */
+export const TIME_SLOTS: string[] = Array.from({ length: 96 }, (_, i) => `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
+
+/** The next quarter hour after `now` ("09:07" → "09:15"), capped at 23:45. */
+export function nextQuarterHour(now = new Date()): string {
+  const mins = Math.min(23 * 60 + 45, Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 15) * 15);
+  return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
+}
+
+/** Picker search: times whose label ("6:30 PM", "6 PM") or value ("18:30") start with what was typed. */
+export function matchTimes(query: string, slots: string[], twelveHour?: boolean): string[] {
+  const norm = (s: string) => s.toLowerCase().replace(/[\s:.]/g, '');
+  const q = norm(query);
+  if (!q) return slots;
+  return slots.filter(
+    (v) =>
+      norm(clockLabel(v, { twelveHour })).startsWith(q) ||
+      norm(clockLabel(v, { twelveHour, compact: true })).startsWith(q) ||
+      norm(v).startsWith(q) ||
+      norm(v).replace(/^0/, '').startsWith(q),
+  );
+}
+
 /** The HH:MM value of an hour, for creating a task at it. */
 export function hourValue(hour: number): string {
   return `${pad(hour)}:00`;

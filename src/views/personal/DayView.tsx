@@ -4,9 +4,10 @@ import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Ellipsis, P
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { TopBar } from '../../components/TopBar';
 import { Button, cx, IconButton } from '../../components/ui/Button';
+import { TimePicker } from '../../components/ui/TimePicker';
 import { addDays, formatLongDate, parseISODate, toISODate } from '../../lib/dates';
-import { byTime, isHHMM } from '../../lib/personalRepo';
-import { clockLabel, hourLabel, hourValue, minutesOf, parseTaskInput, relativeDayName } from '../../lib/personalText';
+import { byTime } from '../../lib/personalRepo';
+import { clockLabel, hourLabel, hourValue, minutesOf, nextQuarterHour, parseTaskInput, relativeDayName } from '../../lib/personalText';
 import { navigate, paths } from '../../lib/router';
 import type { Goal, Task } from '../../lib/types';
 import { reportError } from '../../state/actions';
@@ -124,7 +125,7 @@ export function DayView({ date }: { date?: string }) {
           </div>
         )}
 
-        <AddTaskBar day={day} goals={lists?.activeGoals ?? []} />
+        <AddTaskBar day={day} isToday={isToday} goals={lists?.activeGoals ?? []} />
 
         {lists && lists.activeNonnegs.length === 0 && day >= today && (
           <a
@@ -149,7 +150,7 @@ export function DayView({ date }: { date?: string }) {
 
 /* ------------------------------ Adding ------------------------------ */
 
-function AddTaskBar({ day, goals }: { day: string; goals: Goal[] }) {
+function AddTaskBar({ day, isToday, goals }: { day: string; isToday: boolean; goals: Goal[] }) {
   const [text, setText] = useState('');
   const [time, setTime] = useState('');
   const [goalId, setGoalId] = useState<string | null>(null);
@@ -199,21 +200,15 @@ function AddTaskBar({ day, goals }: { day: string; goals: Goal[] }) {
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-1.5 px-1.5 pt-1 pb-0.5">
-        <label
-          className={cx(
-            'relative flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[12px] transition-colors',
-            finalTime ? 'border-line-strong text-fg' : 'border-line text-fg-3 hover:text-fg',
-          )}
-        >
-          <Clock size={13} />
-          <span className={cx(finalTime && 'tabular-nums')}>{finalTime ? clockLabel(finalTime) : 'Anytime'}</span>
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="Time" />
-        </label>
-        {time && (
-          <IconButton label="Clear time" size="xs" onClick={() => setTime('')}>
-            <X size={12} />
-          </IconButton>
-        )}
+        <TimePicker
+          label="Time"
+          value={finalTime}
+          onChange={(v) => setTime(v ?? '')}
+          placeholder="Anytime"
+          allowClear
+          clearLabel="Anytime"
+          suggest={isToday ? nextQuarterHour() : '09:00'}
+        />
         {goals.length > 0 && (
           <button
             type="button"
@@ -303,8 +298,19 @@ function Timeline({
             const after = current ? items.filter((t) => minutesOf(t.time!) > nowMin) : [];
             return (
               <div key={h} className="group/hour relative flex border-t border-line" data-hour={h}>
-                <div className={cx('w-[60px] shrink-0 pt-[11px] text-[12px] tabular-nums sm:w-[72px]', current ? 'font-medium text-fg' : 'text-fg-3')}>
+                <div className={cx('flex w-[60px] shrink-0 flex-col items-start gap-1 pt-[11px] text-[12px] tabular-nums sm:w-[72px]', current ? 'font-medium text-fg' : 'text-fg-3')}>
                   {hourLabel(h)}
+                  {/* In the label column, so it never covers a task's own buttons. */}
+                  {items.length > 0 && addingAt !== h && (
+                    <IconButton
+                      label={`Add at ${hourLabel(h)}`}
+                      size="xs"
+                      className="-ml-1 opacity-0 group-hover/hour:opacity-100 focus-visible:opacity-100 max-lg:hidden"
+                      onClick={() => setAddingAt(h)}
+                    >
+                      <Plus size={13} />
+                    </IconButton>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1 py-1">
                   {before.map(row)}
@@ -322,16 +328,6 @@ function Timeline({
                     </button>
                   ) : null}
                 </div>
-                {items.length > 0 && addingAt !== h && (
-                  <IconButton
-                    label={`Add at ${hourLabel(h)}`}
-                    size="xs"
-                    className="absolute top-2 right-0 opacity-0 group-hover/hour:opacity-100 focus-visible:opacity-100"
-                    onClick={() => setAddingAt(h)}
-                  >
-                    <Plus size={13} />
-                  </IconButton>
-                )}
               </div>
             );
           })}
@@ -480,21 +476,16 @@ export function TaskRow({ task, goal, goals, day, today, showDate }: { task: Tas
             )}
             {showDate && <a href={task.date === today ? paths.home() : paths.day(task.date)} className="hover:text-fg">{relativeDayName(task.date, today) ?? task.date}</a>}
             {timeEdit && (
-              <input
-                type="time"
-                autoFocus
-                defaultValue={task.time ?? ''}
-                onBlur={(e) => {
-                  setTimeEdit(false);
-                  const v = e.target.value;
-                  if (isHHMM(v) && v !== task.time) personal.updateTask(task.id, { time: v }).catch(reportError);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                  if (e.key === 'Escape') setTimeEdit(false);
-                }}
-                className="field h-7! w-[120px]! text-[12px]"
-                aria-label="Task time"
+              <TimePicker
+                defaultOpen
+                label="Task time"
+                value={task.time}
+                onChange={(v) => v !== task.time && void personal.updateTask(task.id, { time: v }).catch(reportError)}
+                onClose={() => setTimeEdit(false)}
+                allowClear
+                clearLabel="Anytime"
+                placeholder="Anytime"
+                suggest={day === today ? nextQuarterHour() : '09:00'}
               />
             )}
           </div>

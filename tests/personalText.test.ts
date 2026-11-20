@@ -50,3 +50,35 @@ describe('clock labels', () => {
     expect(clockLabel('18:30', { twelveHour: false })).toBe('18:30');
   });
 });
+
+describe('time picker text', () => {
+  it('reads typed times', async () => {
+    const { parseTimeText } = await import('../src/lib/personalText');
+    expect(parseTimeText('6')).toBe('06:00');
+    expect(parseTimeText('6pm')).toBe('18:00');
+    expect(parseTimeText('6 p.m.')).toBe('18:00');
+    expect(parseTimeText('6p')).toBe('18:00');
+    expect(parseTimeText('6:30 pm')).toBe('18:30');
+    expect(parseTimeText('630pm')).toBe('18:30');
+    expect(parseTimeText('18:30')).toBe('18:30');
+    expect(parseTimeText('0630')).toBe('06:30');
+    expect(parseTimeText('12am')).toBe('00:00');
+    expect(parseTimeText('12:15pm')).toBe('12:15');
+    expect(parseTimeText('25')).toBeNull();
+    expect(parseTimeText('13pm')).toBeNull();
+    expect(parseTimeText('6:75')).toBeNull();
+    expect(parseTimeText('gym')).toBeNull();
+  });
+
+  it('filters the list the way Google Calendar does', async () => {
+    const { matchTimes, TIME_SLOTS, nextQuarterHour } = await import('../src/lib/personalText');
+    expect(TIME_SLOTS).toHaveLength(96);
+    expect(matchTimes('6:3', TIME_SLOTS, true)).toEqual(['06:30', '18:30']);
+    expect(matchTimes('6p', TIME_SLOTS, true)[0]).toBe('18:00');
+    expect(matchTimes('18', TIME_SLOTS, true)).toEqual(['18:00', '18:15', '18:30', '18:45']);
+    expect(matchTimes('', TIME_SLOTS, true)).toHaveLength(96);
+    expect(nextQuarterHour(new Date(2026, 10, 20, 9, 7))).toBe('09:15');
+    expect(nextQuarterHour(new Date(2026, 10, 20, 9, 15))).toBe('09:30');
+    expect(nextQuarterHour(new Date(2026, 10, 20, 23, 59))).toBe('23:45');
+  });
+});

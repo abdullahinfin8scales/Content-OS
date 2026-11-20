@@ -3,6 +3,7 @@ import { Repeat, RotateCcw, X } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { PageHeader, TopBar } from '../../components/TopBar';
 import { Button, cx, IconButton } from '../../components/ui/Button';
+import { TimePicker } from '../../components/ui/TimePicker';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { addDays, formatDate, parseISODate, toISODate } from '../../lib/dates';
 import { isHHMM, nnTaskId } from '../../lib/personalRepo';
@@ -97,14 +98,7 @@ function AddForm() {
   };
   return (
     <form onSubmit={submit} className="flex flex-col gap-2 rounded-2xl border border-line-strong p-2 sm:flex-row sm:items-center">
-      <input
-        type="time"
-        value={time}
-        onChange={(e) => setTime(e.target.value)}
-        className="field h-10! tabular-nums sm:w-[140px]!"
-        aria-label="Time"
-        required
-      />
+      <TimePicker variant="field" label="Time" value={time || null} onChange={(v) => setTime(v ?? '')} placeholder="Pick a time" suggest="07:00" className="sm:w-[150px]" />
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -130,16 +124,12 @@ function NonNegRow({ nn, week, copies, today }: { nn: NonNegotiable; week: strin
 
   return (
     <div className="group flex flex-wrap items-center gap-x-3 gap-y-2 px-1 py-2.5 sm:flex-nowrap">
-      <input
-        type="time"
-        defaultValue={nn.time}
-        key={nn.time}
-        onBlur={(e) => {
-          const v = e.target.value;
-          if (isHHMM(v) && v !== nn.time) personal.updateNonNeg(nn.id, { time: v }, today).catch(reportError);
-        }}
-        className="h-8 w-[132px] shrink-0 rounded-lg border border-transparent bg-transparent px-1.5 text-[13.5px] text-fg tabular-nums outline-none hover:border-line focus:border-fg-3"
-        aria-label={`Time for ${nn.title}`}
+      <TimePicker
+        variant="inline"
+        label={`Time for ${nn.title}`}
+        value={nn.time}
+        onChange={(v) => v && v !== nn.time && void personal.updateNonNeg(nn.id, { time: v }, today).catch(reportError)}
+        className="w-[124px]"
       />
       <input
         value={title}
