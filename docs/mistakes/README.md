@@ -21,6 +21,7 @@ Mistakes made while building this project, each turned into a rule. Every agent 
 15. **Browser tests:** wait for real state (URL + focus), assert exact text, use `launchPersistentContext` for folder-backup tests, wait out animations before screenshots, check the database for saved data, hover the row (not its subtree), write scripts with the file tool. → [015](015-browser-test-pitfalls.md)
 16. **A new kind of container must be checked everywhere a destination is chosen:** remembered location, location pickers, drop targets, repo create/move. Threads are never a default location. → [016](016-new-container-leaked-into-defaults.md)
 17. **Short, structured messages:** one-line summary, then numbered steps or bullets; bold what the user must do; never drop an important detail to save space. → [017](017-long-messages-hid-details.md)
+18. **Times use `TimePicker`, never `<input type="time">`** (its segments are fiddly to type into). Hover buttons must not cover another control in the row. → [018](018-native-time-input.md)
 
 ## Adding a mistake
 
