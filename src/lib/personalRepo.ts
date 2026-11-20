@@ -1,9 +1,9 @@
 import type { ContentDB } from './db';
 import { countWords, emptyDoc, makeExcerpt, toPlainText } from './content';
-import { isISODate, todayISO } from './dates';
+import { isISODate, parseISODate, todayISO } from './dates';
 import { uid } from './ids';
 import { withoutUpload } from '../sync/outbox';
-import type { Goal, GoalMeasure, GoalPatch, ID, JournalEntry, NonNegotiable, Note, RichNode, Task, TaskPatch } from './types';
+import type { DayLoss, DayWin, Goal, GoalMeasure, GoalPatch, ID, JournalEntry, NonNegotiable, Note, RichNode, Task, TaskPatch } from './types';
 
 export class PersonalError extends Error {}
 
@@ -17,6 +17,39 @@ export function isHHMM(value: unknown): value is string {
 export function nnTaskId(nnId: ID, date: string): ID {
   return `nn-${nnId}-${date}`;
 }
+
+/** Every weekday, 0 = Sunday … 6 = Saturday. */
+export const ALL_DAYS: readonly number[] = [0, 1, 2, 3, 4, 5, 6];
+
+/** The weekdays a non-negotiable is on. Older records have none stored: every day. */
+export function nnDays(nn: Pick<NonNegotiable, 'days'>): number[] {
+  return nn.days?.length ? nn.days : [...ALL_DAYS];
+}
+
+/** Whether a non-negotiable belongs on a date: one of its weekdays, and not a single day off. */
+export function nnOnDate(nn: Pick<NonNegotiable, 'days' | 'offDates'>, date: string): boolean {
+  if (nn.offDates?.includes(date)) return false;
+  return nnDays(nn).includes(parseISODate(date).getDay());
+}
+
+/** Unique weekdays, sorted. At least one is needed, or the non-negotiable would never appear. */
+function cleanDays(days: readonly number[]): number[] {
+  const out = [...new Set(days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort((a, b) => a - b);
+  if (!out.length) throw new PersonalError('Keep at least one day.');
+  return out;
+}
+
+/** Days off, without the ones already past (they no longer matter: past days are never changed). */
+function futureOffDates(dates: readonly string[] | undefined, today: string): string[] {
+  return [...new Set((dates ?? []).filter((d) => isISODate(d) && d >= today))].sort();
+}
+
+/** Wins, losses and lessons are one line each. */
+function cleanLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 500);
+}
+
+export type DayItemKind = 'wins' | 'losses';
 
 /** Timeline order: by time (untimed first), then the order they were added. */
 export function byTime(a: Task, b: Task): number {
@@ -65,8 +98,9 @@ export class PersonalRepo {
 
   /* ------------------------- Non-negotiables ------------------------- */
 
-  async createNonNeg(input: { title: string; time: string }): Promise<NonNegotiable> {
+  async createNonNeg(input: { title: string; time: string; days?: readonly number[] }): Promise<NonNegotiable> {
     if (!isHHMM(input.time)) throw new PersonalError('Pick a time for this non-negotiable.');
+    const days = cleanDays(input.days ?? ALL_DAYS);
     return this.db.transaction('rw', this.db.nonnegs, async () => {
       const all = await this.db.nonnegs.toArray();
       const t = Date.now();
@@ -76,6 +110,8 @@ export class PersonalRepo {
         time: input.time,
         order: all.reduce((max, n) => Math.max(max, n.order), -1) + 1,
         archivedAt: null,
+        days,
+        offDates: [],
         createdAt: t,
         updatedAt: t,
       };
@@ -84,7 +120,8 @@ export class PersonalRepo {
     });
   }
 
-  async updateNonNeg(id: ID, patch: { title?: string; time?: string }, today = todayISO()): Promise<void> {
+  /** Changes a non-negotiable. Today and later follow at once; past days keep what they had. */
+  async updateNonNeg(id: ID, patch: { title?: string; time?: string; days?: readonly number[] }, today = todayISO()): Promise<void> {
     const nn = await this.db.nonnegs.get(id);
     if (!nn) throw new PersonalError('That non-negotiable no longer exists.');
     const next: Partial<NonNegotiable> = { updatedAt: Date.now() };
@@ -93,8 +130,38 @@ export class PersonalRepo {
       if (!isHHMM(patch.time)) throw new PersonalError('Pick a valid time.');
       next.time = patch.time;
     }
+    if (patch.days !== undefined) next.days = cleanDays(patch.days);
     await this.db.nonnegs.update(id, next);
     await this.syncCopies(id, today);
+  }
+
+  /**
+   * Takes a non-negotiable off one day (today or later) only, e.g. no gym on a
+   * holiday. That day's copy goes, done or not. Removing it uploads, like a
+   * tick: it is the user's own choice, so every device must drop the copy.
+   * Returns the removed copy, for undo.
+   */
+  async skipNonNegOn(id: ID, date: string, today = todayISO()): Promise<Task | undefined> {
+    if (!isISODate(date) || date < today) throw new PersonalError('Past days can’t be changed.');
+    return this.db.transaction('rw', this.db.nonnegs, this.db.tasks, async () => {
+      const nn = await this.db.nonnegs.get(id);
+      if (!nn) throw new PersonalError('That non-negotiable no longer exists.');
+      await this.db.nonnegs.update(id, { offDates: futureOffDates([...(nn.offDates ?? []), date], today), updatedAt: Date.now() });
+      const copy = await this.db.tasks.get(nnTaskId(id, date));
+      if (copy) await this.db.tasks.delete(copy.id);
+      return copy;
+    });
+  }
+
+  /** Puts a skipped day back. A copy given (from `skipNonNegOn`) comes back as it was, tick included. */
+  async unskipNonNegOn(id: ID, date: string, copy?: Task, today = todayISO()): Promise<void> {
+    await this.db.transaction('rw', this.db.nonnegs, this.db.tasks, async () => {
+      const nn = await this.db.nonnegs.get(id);
+      if (!nn) return;
+      await this.db.nonnegs.update(id, { offDates: futureOffDates(nn.offDates, today).filter((d) => d !== date), updatedAt: Date.now() });
+      if (copy?.done) await this.db.tasks.put({ ...copy, updatedAt: Date.now() });
+    });
+    await this.ensureDay(date, today);
   }
 
   /** Moves a non-negotiable up (-1) or down (+1) in the list. */
@@ -140,29 +207,30 @@ export class PersonalRepo {
     await this.db.nonnegs.put({ ...nn, updatedAt: Date.now() });
   }
 
-  /** Brings the not-done copies of one non-negotiable, today and later, in line with it. */
+  /** Brings the not-done copies of one non-negotiable, today and later, in line with it (title, time, days). */
   private async syncCopies(nnId: ID, today: string): Promise<void> {
     const nn = await this.db.nonnegs.get(nnId);
     await withoutUpload(this.db, async () => {
       const copies = await this.db.tasks.where('nnId').equals(nnId).toArray();
       for (const c of copies) {
         if (c.done || c.date < today) continue;
-        if (!nn || nn.archivedAt) await this.db.tasks.delete(c.id);
+        if (!nn || nn.archivedAt || !nnOnDate(nn, c.date)) await this.db.tasks.delete(c.id);
         else if (c.title !== nn.title || c.time !== nn.time) await this.db.tasks.put({ ...c, title: nn.title, time: nn.time });
       }
     });
   }
 
   /**
-   * Makes sure a day (today or later) carries every active non-negotiable at its
-   * time, and drops not-done copies of ones that were removed. Past days are
+   * Makes sure a day (today or later) carries every active non-negotiable that
+   * is on that day, at its time, and drops not-done copies of ones that were
+   * removed or are off that day. Past days are
    * history and are never changed. Safe to call as often as needed: it writes
    * only when something differs. Returns whether anything changed.
    */
   async ensureDay(date: string, today = todayISO()): Promise<boolean> {
     if (!isISODate(date) || date < today) return false;
     const nns = await this.db.nonnegs.toArray();
-    const active = nns.filter((n) => !n.archivedAt);
+    const active = nns.filter((n) => !n.archivedAt && nnOnDate(n, date));
     const byId = new Map(nns.map((n) => [n.id, n]));
     const copies = (await this.db.tasks.where('date').equals(date).toArray()).filter((t) => t.nnId);
     const have = new Set(copies.map((c) => c.nnId));
@@ -172,7 +240,7 @@ export class PersonalRepo {
     for (const c of copies) {
       if (c.done) continue;
       const nn = byId.get(c.nnId!);
-      if (!nn || nn.archivedAt) deletes.push(c.id);
+      if (!nn || nn.archivedAt || !nnOnDate(nn, date)) deletes.push(c.id);
       else if (c.title !== nn.title || c.time !== nn.time) puts.push({ ...c, title: nn.title, time: nn.time });
     }
     const t = Date.now();
@@ -252,11 +320,10 @@ export class PersonalRepo {
     await this.db.tasks.update(id, { done, doneAt: done ? t : null, updatedAt: t });
   }
 
-  /** Deletes one of the user's own tasks and returns it (for undo). Non-negotiable copies can't be deleted. */
   /**
    * Deletes a task and returns it (for undo). A non-negotiable's copy can only be
-   * deleted from a past day; today and later it comes back until the
-   * non-negotiable itself is removed (`archiveNonNeg`).
+   * deleted from a past day; today and later, skip the day (`skipNonNegOn`) or
+   * remove the non-negotiable itself (`archiveNonNeg`).
    */
   async deleteTask(id: ID, today = todayISO()): Promise<Task | undefined> {
     const task = await this.db.tasks.get(id);
@@ -358,6 +425,90 @@ export class PersonalRepo {
       } else {
         await this.db.journal.put({ ...cur, json, ...d, updatedAt: t });
       }
+    });
+  }
+
+  /* -------------------------- Wins and losses -------------------------- */
+
+  /**
+   * Reads a day's wins and losses, lets `fn` change the copies, and saves them on
+   * the day's journal entry (made if needed). `fn` returns undefined to save nothing.
+   */
+  private async editDayItems<R>(date: string, fn: (lists: { wins: DayWin[]; losses: DayLoss[] }) => R | undefined): Promise<R | undefined> {
+    if (!isISODate(date)) throw new PersonalError('Pick a valid day.');
+    return this.db.transaction('rw', this.db.journal, async () => {
+      const cur = await this.db.journal.get(date);
+      const lists = { wins: [...(cur?.wins ?? [])], losses: [...(cur?.losses ?? [])] };
+      const result = fn(lists);
+      if (result === undefined) return undefined;
+      const t = Date.now();
+      const base: JournalEntry = cur ?? { id: date, json: emptyDoc(), excerpt: '', wordCount: 0, createdAt: t, updatedAt: t };
+      await this.db.journal.put({ ...base, ...lists, updatedAt: t });
+      return result;
+    });
+  }
+
+  /** Adds something that went well. Empty text adds nothing. */
+  async addWin(date: string, text: string): Promise<DayWin | undefined> {
+    const clean = cleanLine(text);
+    if (!clean) return undefined;
+    return this.editDayItems(date, ({ wins }) => {
+      const win: DayWin = { id: uid(), text: clean, createdAt: Date.now() };
+      wins.push(win);
+      return win;
+    });
+  }
+
+  /** Adds something that went wrong, with the lesson it taught (can be written later). */
+  async addLoss(date: string, text: string, lesson = ''): Promise<DayLoss | undefined> {
+    const clean = cleanLine(text);
+    if (!clean) return undefined;
+    return this.editDayItems(date, ({ losses }) => {
+      const loss: DayLoss = { id: uid(), text: clean, lesson: cleanLine(lesson), createdAt: Date.now() };
+      losses.push(loss);
+      return loss;
+    });
+  }
+
+  /** Edits a win's or a loss's text (empty keeps the old text), or a loss's lesson (may be empty). */
+  async updateDayItem(date: string, kind: DayItemKind, id: ID, patch: { text?: string; lesson?: string }): Promise<void> {
+    await this.editDayItems(date, (lists) => {
+      const list: (DayWin | DayLoss)[] = lists[kind];
+      const i = list.findIndex((x) => x.id === id);
+      if (i < 0) return undefined;
+      const item = { ...list[i] };
+      const text = patch.text === undefined ? item.text : cleanLine(patch.text) || item.text;
+      let changed = text !== item.text;
+      item.text = text;
+      if (kind === 'losses' && patch.lesson !== undefined) {
+        const lesson = cleanLine(patch.lesson);
+        changed ||= lesson !== (item as DayLoss).lesson;
+        (item as DayLoss).lesson = lesson;
+      }
+      if (!changed) return undefined;
+      list[i] = item;
+      return true;
+    });
+  }
+
+  /** Removes a win or a loss. Returns it and where it was, for undo. */
+  async removeDayItem(date: string, kind: DayItemKind, id: ID): Promise<{ item: DayWin | DayLoss; index: number } | undefined> {
+    return this.editDayItems(date, (lists) => {
+      const list: (DayWin | DayLoss)[] = lists[kind];
+      const index = list.findIndex((x) => x.id === id);
+      if (index < 0) return undefined;
+      const [item] = list.splice(index, 1);
+      return { item, index };
+    });
+  }
+
+  /** Puts back a win or a loss removed with `removeDayItem`, where it was. */
+  async restoreDayItem(date: string, kind: DayItemKind, item: DayWin | DayLoss, index: number): Promise<void> {
+    await this.editDayItems(date, (lists) => {
+      const list: (DayWin | DayLoss)[] = lists[kind];
+      if (list.some((x) => x.id === item.id)) return undefined;
+      list.splice(Math.min(index, list.length), 0, item);
+      return true;
     });
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daysLeftLabel, parseTaskInput, relativeDayName } from '../src/lib/personalText';
+import { daysLeftLabel, daysSummary, parseTaskInput, relativeDayName, weekdayName, weekOrder } from '../src/lib/personalText';
 
 describe('parseTaskInput', () => {
   it('reads a time at the end of a task', () => {
@@ -80,5 +80,23 @@ describe('time picker text', () => {
     expect(nextQuarterHour(new Date(2026, 10, 20, 9, 7))).toBe('09:15');
     expect(nextQuarterHour(new Date(2026, 10, 20, 9, 15))).toBe('09:30');
     expect(nextQuarterHour(new Date(2026, 10, 20, 23, 59))).toBe('23:45');
+  });
+});
+
+describe('weekdays', () => {
+  it('orders the week from the locale’s first day', () => {
+    expect(weekOrder(1)).toEqual([1, 2, 3, 4, 5, 6, 0]);
+    expect(weekOrder(0)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it('sums up a non-negotiable’s days', () => {
+    const name = (d: number) => weekdayName(d, 'short');
+    expect(daysSummary([0, 1, 2, 3, 4, 5, 6])).toBe('Every day');
+    expect(daysSummary([5, 1, 2, 3, 4])).toBe('Weekdays');
+    expect(daysSummary([6, 0])).toBe('Weekends');
+    expect(daysSummary([0, 1, 2, 3, 4, 6])).toBe(`Every day except ${name(5)}`);
+    expect(daysSummary([5, 1, 3], 1)).toBe([1, 3, 5].map(name).join(', '));
+    expect(daysSummary([0, 6], 1)).toBe('Weekends');
+    expect(daysSummary([0, 3], 1)).toBe(`${name(3)}, ${name(0)}`); // Sunday last when the week starts on Monday
   });
 });

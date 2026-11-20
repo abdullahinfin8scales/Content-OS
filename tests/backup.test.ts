@@ -103,6 +103,25 @@ describe('backup', () => {
     expect(hasUserData(parsed)).toBe(false);
   });
 
+  it('round-trips a non-negotiable’s days and days off, and a day’s wins and losses', async () => {
+    const a = await fresh();
+    const p = new PersonalRepo(a.db);
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00', days: [1, 2, 3, 4, 5] });
+    await p.skipNonNegOn(gym.id, '2026-11-23', '2026-11-20');
+    await p.addWin('2026-11-21', 'Shipped it');
+    const loss = await p.addLoss('2026-11-21', 'Slept late', 'Phone out of the bedroom');
+
+    const backup = JSON.parse(JSON.stringify(await exportBackup(a.db)));
+    // Wins alone count as the user's data: a backup holding only them must never be treated as empty.
+    expect(hasUserData({ ...parseBackup(backup), nonnegs: [] })).toBe(true);
+    const b = await fresh();
+    await restoreBackup(b.db, parseBackup(backup));
+    expect(await b.db.nonnegs.get(gym.id)).toMatchObject({ days: [1, 2, 3, 4, 5], offDates: ['2026-11-23'] });
+    const day = (await b.db.journal.get('2026-11-21'))!;
+    expect(day.wins!.map((w) => w.text)).toEqual(['Shipped it']);
+    expect(day.losses).toEqual([expect.objectContaining({ id: loss!.id, text: 'Slept late', lesson: 'Phone out of the bedroom' })]);
+  });
+
   it('drops a task link to a goal that is not in the backup', () => {
     const parsed = parseBackup({
       app: 'infin8-content-os',

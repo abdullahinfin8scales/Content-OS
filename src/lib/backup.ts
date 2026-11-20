@@ -11,6 +11,8 @@ import {
   type Doc,
   type DocContent,
   type DocText,
+  type DayLoss,
+  type DayWin,
   type Folder,
   type Goal,
   type GoalStatus,
@@ -58,7 +60,7 @@ export function hasUserData(b: BackupFile): boolean {
     b.nonnegs.length > 0 ||
     b.tasks.some((t) => !t.nnId || t.done) ||
     b.goals.length > 0 ||
-    b.journal.some((j) => j.wordCount > 0) ||
+    b.journal.some((j) => j.wordCount > 0 || !!j.wins?.length || !!j.losses?.length) ||
     b.notes.length > 0
   );
 }
@@ -215,10 +217,26 @@ function normalizeNonNeg(raw: unknown, index: number): NonNegotiable[] {
       time: raw.time,
       order: num(raw.order, index),
       archivedAt: nullableNum(raw.archivedAt),
+      ...(Array.isArray(raw.days) && raw.days.some(isWeekday) ? { days: [...new Set(raw.days.filter(isWeekday))].sort((a, b) => a - b) } : {}),
+      ...(Array.isArray(raw.offDates) ? { offDates: raw.offDates.filter(isISODate) } : {}),
       createdAt: num(raw.createdAt, t),
       updatedAt: num(raw.updatedAt, t),
     },
   ];
+}
+
+const isWeekday = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 6;
+
+function normalizeWins(v: unknown): DayWin[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((w) => (isObj(w) && typeof w.id === 'string' && w.id && typeof w.text === 'string' ? [{ id: w.id, text: w.text, createdAt: num(w.createdAt, 0) }] : []));
+}
+
+function normalizeLosses(v: unknown): DayLoss[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((l) =>
+    isObj(l) && typeof l.id === 'string' && l.id && typeof l.text === 'string' ? [{ id: l.id, text: l.text, lesson: str(l.lesson), createdAt: num(l.createdAt, 0) }] : [],
+  );
 }
 
 function normalizeTask(raw: unknown, index: number): Task[] {
@@ -266,7 +284,20 @@ function normalizeJournal(raw: unknown): JournalEntry[] {
   const t = Date.now();
   const json = richDoc(raw.json);
   const text = toPlainText(json);
-  return [{ id: raw.id, json, excerpt: makeExcerpt(text), wordCount: countWords(text), createdAt: num(raw.createdAt, t), updatedAt: num(raw.updatedAt, t) }];
+  const wins = normalizeWins(raw.wins);
+  const losses = normalizeLosses(raw.losses);
+  return [
+    {
+      id: raw.id,
+      json,
+      excerpt: makeExcerpt(text),
+      wordCount: countWords(text),
+      ...(wins.length ? { wins } : {}),
+      ...(losses.length ? { losses } : {}),
+      createdAt: num(raw.createdAt, t),
+      updatedAt: num(raw.updatedAt, t),
+    },
+  ];
 }
 
 function normalizeNote(raw: unknown): Note[] {

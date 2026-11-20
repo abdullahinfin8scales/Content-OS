@@ -20,7 +20,7 @@ If the two lists below are not shown inline, open `docs/mistakes/README.md` and 
 ## The project
 
 - One person's private OS, in two sections switched from the top of the sidebar:
-  - **Personal** (`#`, the start page): **Today** (an hour timeline for the day), **Goals** (deadlines, a "why", optional number to reach), **Non-negotiables** (daily commitments, each at a set time, copied onto every day automatically), **Journal** (the day's thoughts) and **Notes**.
+  - **Personal** (`#`, the start page): **Today** (an hour timeline for the day, then the day's **wins** and **losses** with the lesson from each, then its thoughts), **Goals** (deadlines, a "why", optional number to reach), **Non-negotiables** (commitments at a set time, copied automatically onto each of their weekdays; one day can be skipped from that day's list or by date), **Journal** (each day's thoughts, wins and lessons) and **Notes**.
   - **Content OS** (`#content`): the original writing and archive space for social media content (library, pipeline, calendar, spaces).
   - More sections (e.g. Work) are expected later: add routes to `sectionOf` in `src/lib/router.ts` and a branch in the sidebar.
 - Look, by the user's rule: **pure black (#000) with pure white text in dark mode, pure white (#fff) with pure black text in light mode.** Only small hints (dates, placeholders, counts) may be grey (`--fg-3`, `--fg-4`); never make main text or surfaces off-white or near-black. Type is **Geist** / Geist Mono, soft weights (400 body, 500–560 headings, never above 600).
@@ -35,7 +35,8 @@ If the two lists below are not shown inline, open `docs/mistakes/README.md` and 
 
 - `supabase/migrations/`: the database. One `records` table (kind, id, data jsonb, deleted, updated_at, server_updated_at), owner-only row-level security, and two functions: `push_records` (last write wins; returns the server's row when it kept a newer one) and `pull_records` (keyset pages). Change the schema only with a new migration file, applied to both projects.
 - Record kinds: `space`, `folder`, `doc`, `content`, `platform`, and the personal ones `nonneg`, `task`, `goal`, `journal`, `note` (migration `0002_personal_records.sql` widens the `records_kind_check` constraint). **A new kind needs its migration applied before the app version that writes it is deployed**: Postgres fails the whole upload batch on one bad kind, which would stall all syncing.
-- A day's copies of the non-negotiables (task ids `nn-<nnId>-<date>`) are derived data: each device builds them in `PersonalRepo.ensureDay` through `withoutUpload`, and they upload only when the user ticks one. Keep it that way, or an unsynced device could undo a tick made on another.
+- A day's copies of the non-negotiables (task ids `nn-<nnId>-<date>`) are derived data: each device builds them in `PersonalRepo.ensureDay` through `withoutUpload`, and they upload only when the user ticks one, or skips that day (`skipNonNegOn` uploads the removal, so a ticked copy goes on every device). Keep it that way, or an unsynced device could undo a tick made on another. Which days a non-negotiable is on lives on the `nonneg` record itself (`days`: weekdays, missing on older records = every day; `offDates`: single days off), checked by `nnOnDate`.
+- Wins and losses are stored on the day's `journal` record (`wins`, `losses`, both optional), so they sync without a new record kind. New optional fields on an existing kind need no migration (records are stored whole as jsonb); a new kind does.
 - `src/sync/outbox.ts`: Dexie middleware that queues every write to a synced table in `outbox`, inside the same transaction. Writes that must not upload (downloaded rows, clearing the laptop on sign-out) go through `withoutUpload`. Don't add `await` before calling down in the middleware: Dexie's layers need the transaction context (use `Dexie.Promise`).
 - `src/sync/engine.ts`: push/pull/apply, claiming pre-account data on first sign-in (`prepareForUser`), `clearLocal`. Pure logic, tested in `tests/sync.test.ts` against a fake server that mirrors the SQL.
 - `src/state/sync.ts` (when to sync, status), `src/state/auth.ts` (session, sign in/up/out, password reset), `src/components/auth/AuthGate.tsx` (screens in front of the app).
@@ -72,7 +73,7 @@ Run `npm test` and `npm run build` before every commit. Check UI changes in a re
 ## Code map
 
 - `src/lib/repo.ts`: every Content OS data write (cascading trash, folder moves, no folder cycles). Change data rules here and in `tests/`.
-- `src/lib/personalRepo.ts`: every personal write (non-negotiables and their day copies, tasks, goals, journal, notes), tested in `tests/personal.test.ts`. `src/lib/personalText.ts`: task-time parsing ("Call Sara at 3pm"), clock labels (locale 12/24-hour), days-left labels.
+- `src/lib/personalRepo.ts`: every personal write (non-negotiables, their days and day copies, tasks, goals, journal with wins and losses, notes), tested in `tests/personal.test.ts`. `src/lib/personalText.ts`: task-time parsing ("Call Sara at 3pm"), clock labels (locale 12/24-hour), days-left labels, weekday names and summaries ("Weekdays", "Every day except Sun").
 - `src/state/personal.ts`: personal live queries and hooks (`useToday`, `usePersonalLists`, `usePersonalUpkeep` keeps today's timeline built), `focusDay`.
 - `src/views/personal/`: Today/day timeline (`DayView`), Non-negotiables, Goals, Goal, Journal, Notes; `RichNote` is the slim editor used by the journal and notes.
 - `src/lib/content.ts`: rich text → plain text and Markdown (`toPlainText` is what gets posted).

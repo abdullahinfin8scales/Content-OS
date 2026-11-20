@@ -1,18 +1,47 @@
 import type { Editor } from '@tiptap/react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Ellipsis, Plus, Repeat, Sun, Target, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  ArrowRight,
+  CalendarDays,
+  CalendarOff,
+  CalendarX,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Ellipsis,
+  Lightbulb,
+  Minus,
+  Plus,
+  Repeat,
+  Sun,
+  Target,
+  Trash2,
+  TrendingDown,
+  Trophy,
+  X,
+} from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { TopBar } from '../../components/TopBar';
 import { Button, cx, IconButton } from '../../components/ui/Button';
 import { TimePicker } from '../../components/ui/TimePicker';
-import { addDays, formatLongDate, parseISODate, toISODate } from '../../lib/dates';
-import { byTime } from '../../lib/personalRepo';
-import { clockLabel, hourLabel, hourValue, minutesOf, nextQuarterHour, parseTaskInput, relativeDayName } from '../../lib/personalText';
+import { addDays, formatLongDate, parseISODate, toISODate, weekStartsOn } from '../../lib/dates';
+import { byTime, nnDays, nnOnDate } from '../../lib/personalRepo';
+import { clockLabel, daysSummary, hourLabel, hourValue, minutesOf, nextQuarterHour, parseTaskInput, relativeDayName, weekdayName } from '../../lib/personalText';
 import { navigate, paths } from '../../lib/router';
-import type { Goal, Task } from '../../lib/types';
+import type { Goal, NonNegotiable, Task } from '../../lib/types';
 import { reportError } from '../../state/actions';
 import { openMenu, toast, type MenuItem } from '../../state/feedback';
-import { deleteTaskWithUndo, useGoalTasks, useNow, usePersonalLists, useToday } from '../../state/personal';
+import {
+  deleteTaskWithUndo,
+  removeDayItemWithUndo,
+  removeNonNegWithUndo,
+  skipDayWords,
+  useGoalTasks,
+  useNow,
+  usePersonalLists,
+  useToday,
+} from '../../state/personal';
 import { db, personal } from '../../state/repo';
 import { useSettings } from '../../state/settings';
 import { useUI } from '../../state/ui';
@@ -44,6 +73,9 @@ export function DayView({ date }: { date?: string }) {
 
   const sorted = useMemo(() => (tasks ? [...tasks].sort(byTime) : []), [tasks]);
   const goalById = useMemo(() => new Map((lists?.goals ?? []).map((g) => [g.id, g])), [lists]);
+  const nnById = useMemo(() => new Map((lists?.nonnegs ?? []).map((n) => [n.id, n])), [lists]);
+  // Non-negotiables that are off this day (today or later), so they don't just vanish without a word.
+  const offToday = useMemo(() => (day >= today ? (lists?.activeNonnegs ?? []).filter((n) => !nnOnDate(n, day)) : []), [lists, day, today]);
   const done = sorted.filter((t) => t.done).length;
 
   const relative = relativeDayName(day, today);
@@ -140,7 +172,11 @@ export function DayView({ date }: { date?: string }) {
           </a>
         )}
 
-        <Timeline day={day} isToday={isToday} tasks={sorted} goalById={goalById} goals={lists?.activeGoals ?? []} today={today} />
+        {offToday.length > 0 && <OffThisDay day={day} today={today} nonnegs={offToday} />}
+
+        <Timeline day={day} isToday={isToday} tasks={sorted} goalById={goalById} nnById={nnById} goals={lists?.activeGoals ?? []} today={today} />
+
+        <WinsAndLosses key={`wl-${day}`} day={day} isToday={isToday} />
 
         <JournalSection key={day} day={day} />
       </Page>
@@ -239,11 +275,46 @@ function AddTaskBar({ day, isToday, goals }: { day: string; isToday: boolean; go
 
 /* ----------------------------- Timeline ----------------------------- */
 
+/** "Off today: Gym (skipped) · Put back", "Reading (not on Saturdays)". */
+function OffThisDay({ day, today, nonnegs }: { day: string; today: string; nonnegs: NonNegotiable[] }) {
+  const weekday = parseISODate(day).getDay();
+  return (
+    <div className="-mt-4 mb-7 flex flex-wrap items-center gap-x-2 gap-y-1.5 px-1 text-[12.5px] text-fg-3" aria-label="Non-negotiables off this day">
+      <span className="inline-flex items-center gap-1.5">
+        <CalendarOff size={13} /> Off {day === today ? 'today' : 'this day'}:
+      </span>
+      {nonnegs.map((nn) => {
+        const skipped = !!nn.offDates?.includes(day);
+        return (
+          <span key={nn.id} className="inline-flex h-7 items-center gap-1.5 rounded-full border border-line pr-1 pl-2.5">
+            <span className="text-fg">{nn.title}</span>
+            <span>{skipped ? 'skipped' : `not on ${weekdayName(weekday, 'long')}s`}</span>
+            {skipped ? (
+              <button
+                type="button"
+                onClick={() => void personal.unskipNonNegOn(nn.id, day, undefined, today).catch(reportError)}
+                className="h-5 rounded-full px-2 text-[12px] text-fg hover:bg-hover"
+              >
+                Put back
+              </button>
+            ) : (
+              <a href={paths.nonnegotiables()} className="h-5 rounded-full px-2 text-[12px] leading-5 text-fg hover:bg-hover">
+                Change days
+              </a>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function Timeline({
   day,
   isToday,
   tasks,
   goalById,
+  nnById,
   goals,
   today,
 }: {
@@ -251,6 +322,7 @@ function Timeline({
   isToday: boolean;
   tasks: Task[];
   goalById: Map<string, Goal>;
+  nnById: Map<string, NonNegotiable>;
   goals: Goal[];
   today: string;
 }) {
@@ -275,7 +347,9 @@ function Timeline({
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const nowHour = now.getHours();
 
-  const row = (t: Task) => <TaskRow key={t.id} task={t} goal={t.goalId ? goalById.get(t.goalId) : undefined} goals={goals} day={day} today={today} />;
+  const row = (t: Task) => (
+    <TaskRow key={t.id} task={t} goal={t.goalId ? goalById.get(t.goalId) : undefined} nn={t.nnId ? nnById.get(t.nnId) : undefined} goals={goals} day={day} today={today} />
+  );
 
   return (
     <>
@@ -384,7 +458,24 @@ function InlineAdd({ day, time, onDone }: { day: string; time: string; onDone: (
 
 /* ------------------------------ Task row ---------------------------- */
 
-export function TaskRow({ task, goal, goals, day, today, showDate }: { task: Task; goal?: Goal; goals: Goal[]; day: string; today: string; showDate?: boolean }) {
+export function TaskRow({
+  task,
+  goal,
+  goals,
+  day,
+  today,
+  showDate,
+  nn,
+}: {
+  task: Task;
+  goal?: Goal;
+  goals: Goal[];
+  day: string;
+  today: string;
+  showDate?: boolean;
+  /** The non-negotiable this task is a copy of, when it is one. */
+  nn?: NonNegotiable;
+}) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [timeEdit, setTimeEdit] = useState(false);
@@ -398,19 +489,47 @@ export function TaskRow({ task, goal, goals, day, today, showDate }: { task: Tas
   };
 
   const upcoming = task.date >= today;
-  const deleteLabel = isNN ? (upcoming ? `Remove “${task.title}” from every day` : `Delete “${task.title}” from this day`) : `Delete “${task.title}”`;
+  const skipWords = skipDayWords(task.date, today);
+  const deleteLabel = isNN ? (upcoming ? `Skip “${task.title}” ${skipWords}` : `Delete “${task.title}” from this day`) : `Delete “${task.title}”`;
   const remove = () => void deleteTaskWithUndo(task, today);
 
   const menu = (anchor: HTMLElement) => {
     if (isNN) {
+      const weekday = parseISODate(task.date).getDay();
+      const days = nn ? nnDays(nn) : [];
       openMenu(
         anchor,
-        [
-          { label: 'Edit non-negotiables', icon: <Repeat size={14} />, onSelect: () => navigate(paths.nonnegotiables()) },
-          { type: 'separator' },
-          { label: upcoming ? 'Remove from every day' : 'Delete from this day', icon: <Trash2 size={14} />, danger: true, onSelect: remove },
-        ],
-        { align: 'end', minWidth: 220 },
+        upcoming
+          ? [
+              { label: `Skip ${skipWords}`, icon: <CalendarOff size={14} />, onSelect: remove },
+              ...(nn && days.length > 1
+                ? [
+                    {
+                      label: `Off every ${weekdayName(weekday, 'long')}`,
+                      icon: <CalendarX size={14} />,
+                      onSelect: () => {
+                        personal
+                          .updateNonNeg(nn.id, { days: days.filter((d) => d !== weekday) }, today)
+                          .then(() =>
+                            toast(`“${nn.title}” is off on ${weekdayName(weekday, 'long')}s`, {
+                              action: { label: 'Undo', run: () => void personal.updateNonNeg(nn.id, { days }, today).catch(reportError) },
+                            }),
+                          )
+                          .catch(reportError);
+                      },
+                    },
+                  ]
+                : []),
+              { label: 'Edit non-negotiables', icon: <Repeat size={14} />, onSelect: () => navigate(paths.nonnegotiables()) },
+              { type: 'separator' },
+              { label: 'Remove from every day', icon: <Trash2 size={14} />, danger: true, onSelect: () => void removeNonNegWithUndo({ id: task.nnId!, title: task.title }, today) },
+            ]
+          : [
+              { label: 'Edit non-negotiables', icon: <Repeat size={14} />, onSelect: () => navigate(paths.nonnegotiables()) },
+              { type: 'separator' },
+              { label: 'Delete from this day', icon: <Trash2 size={14} />, danger: true, onSelect: remove },
+            ],
+        { align: 'end', minWidth: 230 },
       );
       return;
     }
@@ -469,7 +588,7 @@ export function TaskRow({ task, goal, goals, day, today, showDate }: { task: Tas
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-fg-3">
             {isNN && (
               <span className="inline-flex items-center gap-1">
-                <Repeat size={11} /> Daily
+                <Repeat size={11} /> {nn ? daysSummary(nnDays(nn), weekStartsOn()) : 'Repeats'}
               </span>
             )}
             {goal && (
@@ -502,6 +621,269 @@ export function TaskRow({ task, goal, goals, day, today, showDate }: { task: Tas
         <DeleteButton label={deleteLabel} onClick={remove} />
       </div>
     </div>
+  );
+}
+
+/* -------------------------- Wins and losses -------------------------- */
+
+/** What went well (and how many), and what went wrong with the lesson it taught. Saved on the day's journal entry. */
+function WinsAndLosses({ day, isToday }: { day: string; isToday: boolean }) {
+  const entry = useLiveQuery(async () => (await db.journal.get(day)) ?? null, [day]);
+  const wins = entry?.wins ?? [];
+  const losses = entry?.losses ?? [];
+
+  return (
+    <section aria-label="Wins and losses" className="mb-12">
+      <SectionLabel>Wins &amp; losses</SectionLabel>
+      <div className="grid gap-3 md:grid-cols-2">
+        <DayCard icon={<Trophy size={14} />} title="Wins" count={wins.length} hint={isToday ? 'What went well today — what you achieved' : 'What went well — what you achieved'}>
+          {wins.map((w) => (
+            <div key={w.id} className="flex items-start gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-hover">
+              <Check size={14} strokeWidth={2.25} className="mt-[5px] shrink-0 text-fg" />
+              <InlineText value={w.text} label="Win" onCommit={(text) => personal.updateDayItem(day, 'wins', w.id, { text })} className="text-[14px] leading-6 text-fg" />
+              <DeleteButton size="xs" label={`Remove win “${w.text}”`} className="mt-0.5" onClick={() => void removeDayItemWithUndo(day, 'wins', w.id)} />
+            </div>
+          ))}
+          <AddDayItem label="Add a win" onAdd={(text) => personal.addWin(day, text)} />
+        </DayCard>
+
+        <DayCard icon={<TrendingDown size={14} />} title="Losses" count={losses.length} hint="What went wrong — and the lesson it taught">
+          {losses.map((l) => (
+            <div key={l.id} className="rounded-lg px-1.5 py-1 transition-colors hover:bg-hover">
+              <div className="flex items-start gap-2.5">
+                <Minus size={14} strokeWidth={2.25} className="mt-[5px] shrink-0 text-fg" />
+                <InlineText value={l.text} label="Loss" onCommit={(text) => personal.updateDayItem(day, 'losses', l.id, { text })} className="text-[14px] leading-6 text-fg" />
+                <DeleteButton size="xs" label={`Remove loss “${l.text}”`} className="mt-0.5" onClick={() => void removeDayItemWithUndo(day, 'losses', l.id)} />
+              </div>
+              <div className="flex items-start gap-2.5 pl-6">
+                <Lightbulb size={13} className="mt-[4.5px] shrink-0 text-fg-3" />
+                <InlineText
+                  value={l.lesson}
+                  label={`Lesson from “${l.text}”`}
+                  placeholder="Lesson learned…"
+                  allowEmpty
+                  onCommit={(lesson) => personal.updateDayItem(day, 'losses', l.id, { lesson })}
+                  className="text-[13.5px] leading-[22px] text-fg"
+                />
+              </div>
+            </div>
+          ))}
+          <AddLoss onAdd={(text, lesson) => personal.addLoss(day, text, lesson)} />
+        </DayCard>
+      </div>
+    </section>
+  );
+}
+
+function DayCard({ icon, title, count, hint, children }: { icon: ReactNode; title: string; count: number; hint: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col rounded-2xl border border-line px-3 pt-3.5 pb-2">
+      <div className="mb-2 flex items-start justify-between gap-3 px-1.5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[14px] font-medium text-fg">
+            {icon}
+            {title}
+          </div>
+          <div className="mt-0.5 text-[12px] text-fg-3">{hint}</div>
+        </div>
+        <span className="text-[28px] leading-none font-[560] tracking-[-0.02em] text-fg tabular-nums" aria-label={`${count} ${title.toLowerCase()}`}>
+          {count}
+        </span>
+      </div>
+      <div className="space-y-px">{children}</div>
+    </div>
+  );
+}
+
+function AddDayItem({ label, onAdd }: { label: string; onAdd: (text: string) => Promise<unknown> }) {
+  const [text, setText] = useState('');
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const t = text;
+    if (!t.trim()) return;
+    // Clear at once, so letters typed while it saves start the next one cleanly.
+    setText('');
+    try {
+      await onAdd(t);
+    } catch (err) {
+      setText(t);
+      reportError(err);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="flex items-center gap-2.5 px-1.5 py-0.5">
+      <Plus size={14} className="shrink-0 text-fg-3" />
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => e.key === 'Escape' && (e.target as HTMLInputElement).blur()}
+        placeholder={label}
+        aria-label={label}
+        className="h-8 min-w-0 flex-1 bg-transparent text-[14px] text-fg outline-none placeholder:text-fg-3"
+      />
+    </form>
+  );
+}
+
+/**
+ * "Add a loss", then Enter moves straight to its lesson (no waiting on a save,
+ * so nothing typed lands in the wrong box). Enter there saves both; leaving the
+ * form with a loss written saves it too.
+ */
+function AddLoss({ onAdd }: { onAdd: (text: string, lesson: string) => Promise<unknown> }) {
+  const [text, setText] = useState('');
+  const [lesson, setLesson] = useState('');
+  const draft = useRef({ text: '', lesson: '' });
+  draft.current = { text, lesson };
+  const textRef = useRef<HTMLInputElement>(null);
+  const lessonRef = useRef<HTMLInputElement>(null);
+
+  const save = async () => {
+    const { text: t, lesson: l } = draft.current;
+    if (!t.trim()) return;
+    draft.current = { text: '', lesson: '' };
+    setText('');
+    setLesson('');
+    try {
+      await onAdd(t, l);
+    } catch (err) {
+      setText(t);
+      setLesson(l);
+      reportError(err);
+    }
+  };
+
+  const keys = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      // Cancel: drop the draft, then leave (so leaving doesn't save it).
+      draft.current = { text: '', lesson: '' };
+      setText('');
+      setLesson('');
+      e.currentTarget.blur();
+      return;
+    }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (e.currentTarget === textRef.current) {
+      if (draft.current.text.trim()) lessonRef.current?.focus();
+    } else {
+      textRef.current?.focus();
+      void save();
+    }
+  };
+
+  return (
+    <div
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) void save();
+      }}
+    >
+      <div className="flex items-center gap-2.5 px-1.5 py-0.5">
+        <Plus size={14} className="shrink-0 text-fg-3" />
+        <input
+          ref={textRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={keys}
+          placeholder="Add a loss"
+          aria-label="Add a loss"
+          className="h-8 min-w-0 flex-1 bg-transparent text-[14px] text-fg outline-none placeholder:text-fg-3"
+        />
+      </div>
+      {/* Always there (hidden until a loss is written), so Enter can move focus to it at once. */}
+      <div className={cx('flex items-center gap-2.5 pl-[30px]', !text.trim() && 'hidden')}>
+        <Lightbulb size={13} className="shrink-0 text-fg-3" />
+        <input
+          ref={lessonRef}
+          value={lesson}
+          onChange={(e) => setLesson(e.target.value)}
+          onKeyDown={keys}
+          placeholder="Lesson learned — Enter to save"
+          aria-label="Lesson learned"
+          className="h-8 min-w-0 flex-1 bg-transparent text-[13.5px] text-fg outline-none placeholder:text-fg-3"
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Text that is edited where it sits: wraps like normal text, saves on Enter or
+ * when focus leaves, Escape cancels. Empty text puts the old text back unless
+ * `allowEmpty`.
+ */
+function InlineText({
+  value,
+  onCommit,
+  label,
+  placeholder,
+  className,
+  allowEmpty,
+}: {
+  value: string;
+  onCommit: (text: string) => Promise<unknown>;
+  label: string;
+  placeholder?: string;
+  className?: string;
+  allowEmpty?: boolean;
+}) {
+  const [text, setText] = useState(value);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const cancel = useRef(false);
+
+  // Take changes made elsewhere (another device, undo), but never while typing.
+  useEffect(() => {
+    if (document.activeElement !== ref.current) setText(value);
+  }, [value]);
+
+  // Grow with the text, and again when the column's width changes.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.height = '0px';
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text]);
+
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={text}
+      placeholder={placeholder}
+      aria-label={label}
+      onChange={(e) => setText(e.target.value.replace(/\n/g, ' '))}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+        if (e.key === 'Escape') {
+          cancel.current = true;
+          e.currentTarget.blur();
+        }
+      }}
+      onBlur={() => {
+        if (cancel.current) {
+          cancel.current = false;
+          setText(value);
+          return;
+        }
+        const clean = text.replace(/\s+/g, ' ').trim();
+        if (!clean && !allowEmpty) {
+          setText(value);
+          return;
+        }
+        setText(clean);
+        if (clean !== value) onCommit(clean).catch(reportError);
+      }}
+      className={cx('block min-w-0 flex-1 resize-none overflow-hidden bg-transparent outline-none placeholder:text-fg-3', className)}
+    />
   );
 }
 

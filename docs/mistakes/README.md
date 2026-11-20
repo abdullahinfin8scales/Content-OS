@@ -18,10 +18,11 @@ Mistakes made while building this project, each turned into a rule. Every agent 
 12. **Never change the app's address** (dev/preview ports, Netlify site name, domain) without an export → restore plan the user agreed to. Data is stored per address. → [012](012-data-tied-to-address.md)
 13. **One home for real posts:** https://infin8-content-os.netlify.app. Any other build must say so loudly or be removed. → [013](013-two-homes-for-data.md)
 14. **Dialog autofocus skips hidden and file inputs;** check focus after reordering a dialog. → [014](014-autofocus-hit-hidden-input.md)
-15. **Browser tests:** wait for real state (URL + focus), assert exact text, use `launchPersistentContext` for folder-backup tests, wait out animations before screenshots, check the database for saved data, hover the row (not its subtree), write scripts with the file tool. → [015](015-browser-test-pitfalls.md)
+15. **Browser tests:** wait for real state (URL + focus), assert exact text, use `launchPersistentContext` for folder-backup tests, wait out animations before screenshots, check the database for saved data, hover the row (not its subtree), write scripts with the file tool, match role names with `exact: true`. → [015](015-browser-test-pitfalls.md)
 16. **A new kind of container must be checked everywhere a destination is chosen:** remembered location, location pickers, drop targets, repo create/move. Threads are never a default location. → [016](016-new-container-leaked-into-defaults.md)
 17. **Short, structured messages:** one-line summary, then numbered steps or bullets; bold what the user must do; never drop an important detail to save space. → [017](017-long-messages-hid-details.md)
 18. **Times use `TimePicker`, never `<input type="time">`** (its segments are fiddly to type into). Hover buttons must not cover another control in the row. → [018](018-native-time-input.md)
+19. **Clear an add box and move focus before any `await`,** never after the save; test add flows typing at full speed. → [019](019-focus-moved-after-async-save.md)
 
 ## Adding a mistake
 

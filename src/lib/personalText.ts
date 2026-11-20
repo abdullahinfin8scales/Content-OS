@@ -129,3 +129,36 @@ export function minutesOf(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
 }
+
+/* ------------------------------ Weekdays ------------------------------ */
+
+// 2023-01-01 was a Sunday, so day `d` of that week has getDay() === d.
+const weekdayDate = (d: number) => new Date(2023, 0, 1 + d);
+const weekdayFormats = {
+  narrow: new Intl.DateTimeFormat(undefined, { weekday: 'narrow' }),
+  short: new Intl.DateTimeFormat(undefined, { weekday: 'short' }),
+  long: new Intl.DateTimeFormat(undefined, { weekday: 'long' }),
+};
+
+/** A weekday's name in the user's language (0 = Sunday). */
+export function weekdayName(day: number, style: 'narrow' | 'short' | 'long' = 'short'): string {
+  return weekdayFormats[style].format(weekdayDate(day));
+}
+
+/** The seven weekdays in display order, starting on the locale's first day. */
+export function weekOrder(start: 0 | 1): number[] {
+  return Array.from({ length: 7 }, (_, i) => (start + i) % 7);
+}
+
+/** "Every day", "Weekdays", "Weekends", "Every day except Fri", or the days themselves: "Mon, Wed, Fri". */
+export function daysSummary(days: readonly number[], start: 0 | 1 = 1): string {
+  const set = new Set(days);
+  if (set.size >= 7) return 'Every day';
+  if (set.size === 5 && [1, 2, 3, 4, 5].every((d) => set.has(d))) return 'Weekdays';
+  if (set.size === 2 && set.has(0) && set.has(6)) return 'Weekends';
+  if (set.size === 6) return `Every day except ${weekdayName([0, 1, 2, 3, 4, 5, 6].find((d) => !set.has(d))!, 'short')}`;
+  return weekOrder(start)
+    .filter((d) => set.has(d))
+    .map((d) => weekdayName(d, 'short'))
+    .join(', ');
+}

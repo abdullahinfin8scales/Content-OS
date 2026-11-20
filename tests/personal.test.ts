@@ -125,6 +125,93 @@ describe('non-negotiables on a day', () => {
   });
 });
 
+describe('days a non-negotiable is on', () => {
+  // TODAY (2026-11-20) is a Friday, TOMORROW a Saturday.
+  const SUNDAY = '2026-11-22';
+  const MONDAY = '2026-11-23';
+  const WEEKDAYS = [1, 2, 3, 4, 5];
+
+  it('only lands on its weekdays; older records without days mean every day', async () => {
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00', days: WEEKDAYS });
+    expect(gym.days).toEqual(WEEKDAYS);
+    for (const d of [TODAY, TOMORROW, SUNDAY, MONDAY]) await p.ensureDay(d, TODAY);
+    expect(await db.tasks.get(nnTaskId(gym.id, TODAY))).toBeDefined();
+    expect(await db.tasks.get(nnTaskId(gym.id, TOMORROW))).toBeUndefined();
+    expect(await db.tasks.get(nnTaskId(gym.id, SUNDAY))).toBeUndefined();
+    expect(await db.tasks.get(nnTaskId(gym.id, MONDAY))).toBeDefined();
+
+    const old = await p.createNonNeg({ title: 'Read', time: '22:00' });
+    await db.nonnegs.update(old.id, { days: undefined, offDates: undefined });
+    await p.ensureDay(SUNDAY, TODAY);
+    expect(await db.tasks.get(nnTaskId(old.id, SUNDAY))).toBeDefined();
+  });
+
+  it('changing the days clears not-done copies on days now off, keeps done ones and past days', async () => {
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await p.ensureDay(YESTERDAY, YESTERDAY);
+    for (const d of [TODAY, TOMORROW, SUNDAY]) await p.ensureDay(d, TODAY);
+    await p.setDone(nnTaskId(gym.id, SUNDAY), true);
+
+    await p.updateNonNeg(gym.id, { days: [4, 1, 1, 2, 3, 5] }, TODAY); // Mon–Fri, given unsorted with a repeat
+    expect((await db.nonnegs.get(gym.id))!.days).toEqual(WEEKDAYS);
+    expect(await db.tasks.get(nnTaskId(gym.id, TOMORROW))).toBeUndefined();
+    expect(await db.tasks.get(nnTaskId(gym.id, SUNDAY))).toBeDefined(); // done: kept
+    expect(await db.tasks.get(nnTaskId(gym.id, TODAY))).toBeDefined();
+    expect(await db.tasks.get(nnTaskId(gym.id, YESTERDAY))).toBeDefined();
+
+    await p.updateNonNeg(gym.id, { days: [0, 6] }, TODAY);
+    expect(await db.tasks.get(nnTaskId(gym.id, TODAY))).toBeUndefined();
+    await p.ensureDay(TOMORROW, TODAY);
+    expect(await db.tasks.get(nnTaskId(gym.id, TOMORROW))).toBeDefined();
+  });
+
+  it('needs at least one day', async () => {
+    await expect(p.createNonNeg({ title: 'Gym', time: '06:00', days: [] })).rejects.toThrow(/at least one day/);
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await expect(p.updateNonNeg(gym.id, { days: [9] }, TODAY)).rejects.toThrow(/at least one day/);
+  });
+
+  it('skips a single day, done or not, and undo brings it back as it was', async () => {
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await p.ensureDay(TODAY, TODAY);
+    await p.ensureDay(TOMORROW, TODAY);
+    await p.setDone(nnTaskId(gym.id, TODAY), true);
+    await db.outbox.clear();
+
+    const copy = await p.skipNonNegOn(gym.id, TODAY, TODAY);
+    expect(copy?.done).toBe(true);
+    expect(await db.tasks.get(nnTaskId(gym.id, TODAY))).toBeUndefined();
+    expect((await db.nonnegs.get(gym.id))!.offDates).toEqual([TODAY]);
+    // The removal uploads, so other devices drop the copy too.
+    expect((await db.outbox.toArray()).map((e) => e.key).sort()).toEqual([`nonneg:${gym.id}`, `task:${nnTaskId(gym.id, TODAY)}`]);
+    // Rebuilding the day doesn't bring it back; other days are untouched.
+    await p.ensureDay(TODAY, TODAY);
+    expect(await db.tasks.get(nnTaskId(gym.id, TODAY))).toBeUndefined();
+    expect(await db.tasks.get(nnTaskId(gym.id, TOMORROW))).toBeDefined();
+
+    await p.unskipNonNegOn(gym.id, TODAY, copy, TODAY);
+    expect((await db.nonnegs.get(gym.id))!.offDates).toEqual([]);
+    expect((await db.tasks.get(nnTaskId(gym.id, TODAY)))!.done).toBe(true);
+  });
+
+  it('putting back a skipped day without a copy rebuilds it', async () => {
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await p.skipNonNegOn(gym.id, MONDAY, TODAY);
+    await p.ensureDay(MONDAY, TODAY);
+    expect(await db.tasks.get(nnTaskId(gym.id, MONDAY))).toBeUndefined();
+    await p.unskipNonNegOn(gym.id, MONDAY, undefined, TODAY);
+    expect((await db.tasks.get(nnTaskId(gym.id, MONDAY)))!.done).toBe(false);
+  });
+
+  it('refuses to skip a past day, and forgets days off once they are past', async () => {
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await expect(p.skipNonNegOn(gym.id, YESTERDAY, TODAY)).rejects.toThrow(/Past days/);
+    await p.skipNonNegOn(gym.id, TODAY, YESTERDAY); // made yesterday
+    await p.skipNonNegOn(gym.id, MONDAY, TOMORROW); // made two days later: TODAY is now past
+    expect((await db.nonnegs.get(gym.id))!.offDates).toEqual([MONDAY]);
+  });
+});
+
 describe('tasks', () => {
   it('sorts untimed tasks first, then by time', async () => {
     await p.createTask({ date: TODAY, title: 'Late', time: '18:00' });
@@ -219,6 +306,35 @@ describe('journal and notes', () => {
     expect(await db.journal.get(TODAY)).toBeUndefined();
     await p.saveJournal(TODAY, doc('Good focus today'));
     expect(await db.journal.get(TODAY)).toMatchObject({ excerpt: 'Good focus today', wordCount: 3 });
+  });
+
+  it('keeps a day’s wins and losses (with lessons) beside its thoughts', async () => {
+    expect(await p.addWin(TODAY, '   ')).toBeUndefined();
+    expect(await db.journal.get(TODAY)).toBeUndefined();
+
+    const w1 = await p.addWin(TODAY, ' Closed  the deal ');
+    const w2 = await p.addWin(TODAY, 'Gym before 7');
+    const loss = await p.addLoss(TODAY, 'Lost 2 hours on my phone');
+    expect(w1!.text).toBe('Closed the deal');
+    let entry = (await db.journal.get(TODAY))!;
+    expect(entry.wins!.map((w) => w.text)).toEqual(['Closed the deal', 'Gym before 7']);
+    expect(entry.losses).toEqual([expect.objectContaining({ text: 'Lost 2 hours on my phone', lesson: '' })]);
+    expect(entry.wordCount).toBe(0);
+
+    // Writing thoughts keeps the wins, and wins keep the thoughts.
+    await p.saveJournal(TODAY, doc('Good focus today'));
+    await p.updateDayItem(TODAY, 'losses', loss!.id, { lesson: 'Phone stays in the other room' });
+    await p.updateDayItem(TODAY, 'wins', w2!.id, { text: '' }); // empty keeps the old text
+    entry = (await db.journal.get(TODAY))!;
+    expect(entry.excerpt).toBe('Good focus today');
+    expect(entry.wins).toHaveLength(2);
+    expect(entry.wins![1].text).toBe('Gym before 7');
+    expect(entry.losses![0].lesson).toBe('Phone stays in the other room');
+
+    const removed = await p.removeDayItem(TODAY, 'wins', w1!.id);
+    expect((await db.journal.get(TODAY))!.wins!.map((w) => w.text)).toEqual(['Gym before 7']);
+    await p.restoreDayItem(TODAY, 'wins', removed!.item, removed!.index);
+    expect((await db.journal.get(TODAY))!.wins!.map((w) => w.text)).toEqual(['Closed the deal', 'Gym before 7']);
   });
 
   it('creates, edits, deletes and restores notes', async () => {

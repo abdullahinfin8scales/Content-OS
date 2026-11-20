@@ -1,6 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState } from 'react';
-import { todayISO } from '../lib/dates';
+import { formatDate, todayISO } from '../lib/dates';
+import type { DayItemKind } from '../lib/personalRepo';
+import { relativeDayName } from '../lib/personalText';
 import { navigate, parseHash, paths } from '../lib/router';
 import type { Goal, NonNegotiable, Note, Task } from '../lib/types';
 import { reportError } from './actions';
@@ -112,15 +114,47 @@ export async function deleteNoteWithUndo(id: string, leave: boolean) {
 
 /* ------------------------------ Removing ------------------------------ */
 
-/** Deletes a task (undo in the toast). On today or later, a non-negotiable's copy removes the non-negotiable from every day instead. */
+/** Deletes a task (undo in the toast). On today or later, a non-negotiable's copy skips that day only instead. */
 export async function deleteTaskWithUndo(task: Task, today: string) {
   try {
     if (task.nnId && task.date >= today) {
-      await removeNonNegWithUndo({ id: task.nnId, title: task.title }, today);
+      await skipNonNegWithUndo({ id: task.nnId, title: task.title }, task.date, today);
       return;
     }
     const removed = await personal.deleteTask(task.id, today);
     if (removed) toast('Task deleted', { action: { label: 'Undo', run: () => void personal.restoreTask(removed) } });
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+/** "today", "tomorrow" or "on Mon, Nov 23". */
+export function skipDayWords(date: string, today: string): string {
+  const rel = relativeDayName(date, today);
+  return rel ? rel.toLowerCase() : `on ${formatDate(date, { weekday: true })}`;
+}
+
+/** Takes a non-negotiable off one day only (today or later); undo in the toast puts it back as it was. */
+export async function skipNonNegWithUndo(nn: Pick<NonNegotiable, 'id' | 'title'>, date: string, today: string) {
+  try {
+    const copy = await personal.skipNonNegOn(nn.id, date, today);
+    toast(`Skipped “${nn.title}” ${skipDayWords(date, today)}`, {
+      action: { label: 'Undo', run: () => void personal.unskipNonNegOn(nn.id, date, copy, today).catch(reportError) },
+    });
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+/** Removes a win or a loss (undo in the toast). */
+export async function removeDayItemWithUndo(date: string, kind: DayItemKind, id: string) {
+  try {
+    const removed = await personal.removeDayItem(date, kind, id);
+    if (removed) {
+      toast(kind === 'wins' ? 'Win removed' : 'Loss removed', {
+        action: { label: 'Undo', run: () => void personal.restoreDayItem(date, kind, removed.item, removed.index) },
+      });
+    }
   } catch (err) {
     reportError(err);
   }

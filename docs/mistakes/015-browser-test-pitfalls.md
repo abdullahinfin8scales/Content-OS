@@ -20,6 +20,8 @@ Several Playwright runs failed or passed for the wrong reasons:
 - Check the database directly when asserting what was saved.
 - Hover the row itself (e.g. `aside a[href^="#space-"]`), not a tree item that contains children.
 - Write test scripts with the file-writing tool and keep Bash commands short and separate.
+- Pass `exact: true` to `getByRole(…, { name })` and `getByLabel`: names match as substrings by default, so "Loss" also finds "Add a loss" (2026-11-20).
+- Several toasts can be open at once: click the Undo inside the toast you mean, not `.first()`.
 
 ## Where
 Playwright test scripts

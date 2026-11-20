@@ -143,7 +143,7 @@ export type DocPatch = Partial<
 /* Personal: non-negotiables, day tasks, goals, journal, notes          */
 /* ------------------------------------------------------------------ */
 
-/** A daily commitment. It appears on every day's timeline at its time. */
+/** A daily commitment. It appears on each of its days' timelines at its time. */
 export interface NonNegotiable {
   id: ID;
   title: string;
@@ -152,6 +152,10 @@ export interface NonNegotiable {
   order: number;
   /** Taken off the daily list at this time; past days keep their copies. */
   archivedAt: number | null;
+  /** Weekdays it is on (0 = Sunday … 6 = Saturday). Missing (older records) means every day. */
+  days?: number[];
+  /** Single dates it is off (YYYY-MM-DD), on top of the weekdays. Only today and later are kept. */
+  offDates?: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -198,12 +202,33 @@ export interface Goal {
   updatedAt: number;
 }
 
-/** The thoughts of one day. The id is the date, YYYY-MM-DD. */
+/** Something that went well on a day. */
+export interface DayWin {
+  id: ID;
+  text: string;
+  createdAt: number;
+}
+
+/** Something that went wrong on a day, and what it taught. */
+export interface DayLoss {
+  id: ID;
+  text: string;
+  lesson: string;
+  createdAt: number;
+}
+
+/**
+ * One day's reflection. The id is the date, YYYY-MM-DD. Wins and losses live
+ * here too (optional: older entries don't have them), so they sync as part of
+ * the day's `journal` record without a new record kind.
+ */
 export interface JournalEntry {
   id: string;
   json: RichNode;
   excerpt: string;
   wordCount: number;
+  wins?: DayWin[];
+  losses?: DayLoss[];
   createdAt: number;
   updatedAt: number;
 }
