@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { BackupError, exportBackup, parseBackup, restoreBackup } from '../src/lib/backup';
+import { BackupError, exportBackup, hasUserData, parseBackup, restoreBackup } from '../src/lib/backup';
 import { ContentDB } from '../src/lib/db';
+import { nnTaskId, PersonalRepo } from '../src/lib/personalRepo';
 import { Repo } from '../src/lib/repo';
 
 const fresh = async () => {
@@ -70,5 +71,50 @@ describe('backup', () => {
     expect(parsed.docs[0].platforms).toEqual(['x']);
     expect(parsed.docs[0].publishDate).toBeNull();
     expect(parsed.contents.map((c) => c.id)).toEqual(['d1']);
+  });
+
+  it('round-trips personal data, and keeps old backups without it working', async () => {
+    const a = await fresh();
+    const p = new PersonalRepo(a.db);
+    const nn = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await p.ensureDay('2026-11-20', '2026-11-20');
+    await p.setDone(nnTaskId(nn.id, '2026-11-20'), true);
+    const goal = await p.createGoal({ title: '10k', targetDate: '2026-12-31', measure: { current: 10, target: 100, unit: 'followers' } }, '2026-11-20');
+    const task = await p.createTask({ date: '2026-11-20', title: 'Post', time: '13:00', goalId: goal.id });
+    await p.saveJournal('2026-11-20', { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Calm day' }] }] });
+    const note = await p.createNote({ title: 'Ideas' });
+
+    const backup = JSON.parse(JSON.stringify(await exportBackup(a.db)));
+    expect(hasUserData(parseBackup(backup))).toBe(true);
+    const b = await fresh();
+    await restoreBackup(b.db, parseBackup(backup));
+    expect((await b.db.nonnegs.get(nn.id))!.time).toBe('06:00');
+    expect((await b.db.tasks.get(nnTaskId(nn.id, '2026-11-20')))!.done).toBe(true);
+    expect((await b.db.tasks.get(task.id))!.goalId).toBe(goal.id);
+    expect((await b.db.goals.get(goal.id))!.measure).toEqual({ current: 10, target: 100, unit: 'followers' });
+    expect((await b.db.journal.get('2026-11-20'))!.excerpt).toBe('Calm day');
+    expect((await b.db.notes.get(note.id))!.title).toBe('Ideas');
+
+    // A version-1 backup has no personal arrays: it restores and leaves them empty.
+    const old = { ...backup, version: 1 };
+    for (const key of ['nonnegs', 'tasks', 'goals', 'journal', 'notes']) delete old[key];
+    const parsed = parseBackup(old);
+    expect(parsed.tasks).toEqual([]);
+    expect(hasUserData(parsed)).toBe(false);
+  });
+
+  it('drops a task link to a goal that is not in the backup', () => {
+    const parsed = parseBackup({
+      app: 'infin8-content-os',
+      version: 2,
+      spaces: [],
+      folders: [],
+      docs: [],
+      contents: [],
+      tasks: [{ id: 't1', date: '2026-11-20', title: 'X', time: '9am', goalId: 'missing' }],
+      nonnegs: [{ id: 'n1', title: 'No time' }],
+    });
+    expect(parsed.tasks[0]).toMatchObject({ goalId: null, time: null });
+    expect(parsed.nonnegs).toEqual([]);
   });
 });

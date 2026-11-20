@@ -1,7 +1,9 @@
 import type { ContentDB } from './db';
 import { countChars, countWords, emptyDoc, makeExcerpt, toPlainText } from './content';
 import { isISODate } from './dates';
+import { isHHMM } from './personalRepo';
 import {
+  GOAL_STATUSES,
   METRIC_KEYS,
   PLATFORMS,
   SPACE_COLORS,
@@ -10,7 +12,13 @@ import {
   type DocContent,
   type DocText,
   type Folder,
+  type Goal,
+  type GoalStatus,
+  type JournalEntry,
   type Metrics,
+  type NonNegotiable,
+  type Note,
+  type Task,
   type CustomPlatform,
   type PlatformIconData,
   type RichNode,
@@ -20,7 +28,8 @@ import {
 } from './types';
 
 export const BACKUP_APP = 'infin8-content-os';
-export const BACKUP_VERSION = 1;
+/** 2 added personal data (non-negotiables, tasks, goals, journal, notes). */
+export const BACKUP_VERSION = 2;
 
 export interface BackupFile {
   app: typeof BACKUP_APP;
@@ -32,12 +41,33 @@ export interface BackupFile {
   contents: DocContent[];
   /** Platforms the user added (missing in backups made before they existed). */
   platforms: CustomPlatform[];
+  /** Personal data (missing in backups made before version 2). */
+  nonnegs: NonNegotiable[];
+  tasks: Task[];
+  goals: Goal[];
+  journal: JournalEntry[];
+  notes: Note[];
+}
+
+const PERSONAL_TABLES = ['nonnegs', 'tasks', 'goals', 'journal', 'notes'] as const;
+
+/** True when the backup holds anything the user made (an empty one must never replace a good one). */
+export function hasUserData(b: BackupFile): boolean {
+  return (
+    b.docs.some((d) => !d.deletedAt) ||
+    b.nonnegs.length > 0 ||
+    b.tasks.some((t) => !t.nnId || t.done) ||
+    b.goals.length > 0 ||
+    b.journal.some((j) => j.wordCount > 0) ||
+    b.notes.length > 0
+  );
 }
 
 export class BackupError extends Error {}
 
 export async function exportBackup(db: ContentDB): Promise<BackupFile> {
-  return db.transaction('r', [db.spaces, db.folders, db.docs, db.contents, db.platforms], async () => ({
+  const tables = ['spaces', 'folders', 'docs', 'contents', 'platforms', ...PERSONAL_TABLES].map((n) => db.table(n));
+  return db.transaction('r', tables, async () => ({
     app: BACKUP_APP,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
@@ -46,6 +76,11 @@ export async function exportBackup(db: ContentDB): Promise<BackupFile> {
     docs: await db.docs.toArray(),
     contents: await db.contents.toArray(),
     platforms: await db.platforms.toArray(),
+    nonnegs: await db.nonnegs.toArray(),
+    tasks: await db.tasks.toArray(),
+    goals: await db.goals.toArray(),
+    journal: await db.journal.toArray(),
+    notes: await db.notes.toArray(),
   }));
 }
 
@@ -167,10 +202,96 @@ function normalizePlatform(raw: unknown): CustomPlatform[] {
   ];
 }
 
+const nullableTime = (v: unknown): string | null => (isHHMM(v) ? v : null);
+const richDoc = (v: unknown): RichNode => (isObj(v) ? (v as RichNode) : emptyDoc());
+
+function normalizeNonNeg(raw: unknown, index: number): NonNegotiable[] {
+  if (!isObj(raw) || typeof raw.id !== 'string' || !raw.id || !isHHMM(raw.time)) return [];
+  const t = Date.now();
+  return [
+    {
+      id: raw.id,
+      title: str(raw.title, 'Untitled'),
+      time: raw.time,
+      order: num(raw.order, index),
+      archivedAt: nullableNum(raw.archivedAt),
+      createdAt: num(raw.createdAt, t),
+      updatedAt: num(raw.updatedAt, t),
+    },
+  ];
+}
+
+function normalizeTask(raw: unknown, index: number): Task[] {
+  if (!isObj(raw) || typeof raw.id !== 'string' || !raw.id || !isISODate(raw.date)) return [];
+  const t = Date.now();
+  return [
+    {
+      id: raw.id,
+      date: raw.date,
+      title: str(raw.title, 'Untitled task'),
+      time: nullableTime(raw.time),
+      done: raw.done === true,
+      doneAt: nullableNum(raw.doneAt),
+      goalId: nullableStr(raw.goalId),
+      nnId: nullableStr(raw.nnId),
+      order: num(raw.order, index),
+      createdAt: num(raw.createdAt, t),
+      updatedAt: num(raw.updatedAt, t),
+    },
+  ];
+}
+
+function normalizeGoal(raw: unknown): Goal[] {
+  if (!isObj(raw) || typeof raw.id !== 'string' || !raw.id || !isISODate(raw.targetDate)) return [];
+  const t = Date.now();
+  const m = isObj(raw.measure) ? raw.measure : null;
+  const target = m ? num(m.target, 0) : 0;
+  return [
+    {
+      id: raw.id,
+      title: str(raw.title, 'Untitled goal'),
+      why: str(raw.why),
+      startDate: isISODate(raw.startDate) ? raw.startDate : raw.targetDate,
+      targetDate: raw.targetDate,
+      status: oneOf<GoalStatus>(raw.status, GOAL_STATUSES, 'active'),
+      measure: m && target > 0 ? { target, current: Math.max(0, num(m.current, 0)), unit: str(m.unit) } : null,
+      createdAt: num(raw.createdAt, t),
+      updatedAt: num(raw.updatedAt, t),
+    },
+  ];
+}
+
+function normalizeJournal(raw: unknown): JournalEntry[] {
+  if (!isObj(raw) || !isISODate(raw.id)) return [];
+  const t = Date.now();
+  const json = richDoc(raw.json);
+  const text = toPlainText(json);
+  return [{ id: raw.id, json, excerpt: makeExcerpt(text), wordCount: countWords(text), createdAt: num(raw.createdAt, t), updatedAt: num(raw.updatedAt, t) }];
+}
+
+function normalizeNote(raw: unknown): Note[] {
+  if (!isObj(raw) || typeof raw.id !== 'string' || !raw.id) return [];
+  const t = Date.now();
+  const json = richDoc(raw.json);
+  const text = toPlainText(json);
+  return [
+    {
+      id: raw.id,
+      title: str(raw.title),
+      json,
+      excerpt: makeExcerpt(toPlainText(json, { headings: false })) || makeExcerpt(text),
+      wordCount: countWords(text),
+      pinned: raw.pinned === true,
+      createdAt: num(raw.createdAt, t),
+      updatedAt: num(raw.updatedAt, t),
+    },
+  ];
+}
+
 /** Validates an untrusted parsed JSON value and fills in defaults. */
 export function parseBackup(value: unknown): BackupFile {
   if (!isObj(value) || value.app !== BACKUP_APP) {
-    throw new BackupError('This file is not an Infin8 Content OS backup.');
+    throw new BackupError('This file is not an Infin8 OS backup.');
   }
   if (typeof value.version !== 'number' || value.version > BACKUP_VERSION) {
     throw new BackupError('This backup was made by a newer version of the app.');
@@ -197,6 +318,13 @@ export function parseBackup(value: unknown): BackupFile {
   for (const d of validDocs) if (d.folderId && !folderIds.has(d.folderId)) d.folderId = null;
   const docIds = new Set(validDocs.map((d) => d.id));
 
+  const list = (key: string): unknown[] => (Array.isArray(value[key]) ? (value[key] as unknown[]) : []);
+  const nonnegs = list('nonnegs').flatMap(normalizeNonNeg);
+  const goals = list('goals').flatMap(normalizeGoal);
+  const goalIds = new Set(goals.map((g) => g.id));
+  const tasks = list('tasks').flatMap(normalizeTask);
+  for (const task of tasks) if (task.goalId && !goalIds.has(task.goalId)) task.goalId = null;
+
   return {
     app: BACKUP_APP,
     version: BACKUP_VERSION,
@@ -206,6 +334,11 @@ export function parseBackup(value: unknown): BackupFile {
     docs: validDocs,
     contents: contents.filter((c) => docIds.has(c.id)),
     platforms,
+    nonnegs,
+    tasks,
+    goals,
+    journal: list('journal').flatMap(normalizeJournal),
+    notes: list('notes').flatMap(normalizeNote),
   };
 }
 
@@ -223,8 +356,14 @@ export async function restoreBackup(db: ContentDB, backup: BackupFile): Promise<
     const excerpt = makeExcerpt(toPlainText(json, { headings: false })) || makeExcerpt(text);
     docs.push({ ...doc, excerpt, wordCount: countWords(text), charCount: countChars(text) });
   }
-  await db.transaction('rw', [db.spaces, db.folders, db.docs, db.contents, db.texts, db.platforms], async () => {
-    await Promise.all([db.spaces.clear(), db.folders.clear(), db.docs.clear(), db.contents.clear(), db.texts.clear(), db.platforms.clear()]);
+  const personalTables = PERSONAL_TABLES.map((n) => db.table(n));
+  await db.transaction('rw', [db.spaces, db.folders, db.docs, db.contents, db.texts, db.platforms, ...personalTables], async () => {
+    await Promise.all([db.spaces.clear(), db.folders.clear(), db.docs.clear(), db.contents.clear(), db.texts.clear(), db.platforms.clear(), ...personalTables.map((t) => t.clear())]);
+    await db.nonnegs.bulkAdd(backup.nonnegs);
+    await db.tasks.bulkAdd(backup.tasks);
+    await db.goals.bulkAdd(backup.goals);
+    await db.journal.bulkAdd(backup.journal);
+    await db.notes.bulkAdd(backup.notes);
     await db.platforms.bulkAdd(backup.platforms);
     await db.spaces.bulkAdd(backup.spaces);
     await db.folders.bulkAdd(backup.folders);
@@ -235,8 +374,9 @@ export async function restoreBackup(db: ContentDB, backup: BackupFile): Promise<
 }
 
 export async function clearAll(db: ContentDB): Promise<void> {
-  await db.transaction('rw', [db.spaces, db.folders, db.docs, db.contents, db.texts, db.platforms], async () => {
-    await Promise.all([db.spaces.clear(), db.folders.clear(), db.docs.clear(), db.contents.clear(), db.texts.clear(), db.platforms.clear()]);
+  const personalTables = PERSONAL_TABLES.map((n) => db.table(n));
+  await db.transaction('rw', [db.spaces, db.folders, db.docs, db.contents, db.texts, db.platforms, ...personalTables], async () => {
+    await Promise.all([db.spaces.clear(), db.folders.clear(), db.docs.clear(), db.contents.clear(), db.texts.clear(), db.platforms.clear(), ...personalTables.map((t) => t.clear())]);
   });
 }
 

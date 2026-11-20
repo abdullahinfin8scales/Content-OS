@@ -1,12 +1,12 @@
 {
-  "name": "Infin8 Content OS",
-  "short_name": "Content OS",
-  "description": "A private writing and archive space for social media content.",
+  "name": "Infin8 OS",
+  "short_name": "Infin8 OS",
+  "description": "Your private space for goals, daily tasks, notes and content.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#07080a",
-  "theme_color": "#07080a",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },

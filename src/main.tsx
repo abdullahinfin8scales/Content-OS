@@ -1,9 +1,7 @@
-import '@fontsource-variable/inter';
-import '@fontsource-variable/inter/wght-italic.css';
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
 import '@fontsource-variable/newsreader';
 import '@fontsource-variable/newsreader/wght-italic.css';
-import '@fontsource-variable/jetbrains-mono';
-import '@fontsource/michroma';
 import './styles/index.css';
 
 import { StrictMode } from 'react';

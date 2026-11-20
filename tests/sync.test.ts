@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ContentDB } from '../src/lib/db';
+import { nnTaskId, PersonalRepo } from '../src/lib/personalRepo';
 import { Repo } from '../src/lib/repo';
 import type { RichNode } from '../src/lib/types';
 import {
@@ -17,6 +18,9 @@ import {
   type SyncServer,
 } from '../src/sync/engine';
 import { trackChanges } from '../src/sync/outbox';
+
+/** The kinds the `records_kind_check` constraint allows (supabase/migrations/0002). */
+const ALLOWED_KINDS = new Set(['space', 'folder', 'doc', 'content', 'platform', 'nonneg', 'task', 'goal', 'journal', 'note']);
 
 /** Behaves like the SQL in supabase/migrations: JSON storage, last write wins, keyset pages. */
 class FakeServer implements SyncServer {
@@ -38,6 +42,8 @@ class FakeServer implements SyncServer {
       throw e;
     }
     if (this.refuse && changes.some(this.refuse)) throw new SyncError('Request too large', 'payload');
+    // Like Postgres: one row breaking the check constraint fails the whole call.
+    if (changes.some((c) => !ALLOWED_KINDS.has(c.kind))) throw new SyncError('new row violates check constraint "records_kind_check"', 'server');
     if (this.duringPush) {
       const f = this.duringPush;
       this.duringPush = null;
@@ -80,7 +86,7 @@ let n = 0;
 function device() {
   const db = new ContentDB(`sync-${++n}-${Math.random()}`);
   trackChanges(db);
-  return { db, repo: new Repo(db) };
+  return { db, repo: new Repo(db), personal: new PersonalRepo(db) };
 }
 
 const text = (s: string): RichNode => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: s }] }] });
@@ -206,6 +212,44 @@ describe('two devices', () => {
     await pullChanges(b.db, server);
     expect(await b.db.platforms.count()).toBe(1203);
     expect(await b.db.outbox.count()).toBe(0);
+  });
+});
+
+describe('personal records', () => {
+  it('syncs non-negotiables, tasks, goals, journal and notes between devices', async () => {
+    const a = device();
+    const b = device();
+    const nn = await a.personal.createNonNeg({ title: 'Gym', time: '06:00' });
+    const goal = await a.personal.createGoal({ title: 'Launch', targetDate: '2026-12-31' }, '2026-11-20');
+    const task = await a.personal.createTask({ date: '2026-11-20', title: 'Outline', time: '09:00', goalId: goal.id });
+    await a.personal.saveJournal('2026-11-20', text('Calm day'));
+    const note = await a.personal.createNote({ title: 'Ideas' });
+
+    await pushPending(a.db, server);
+    await pullChanges(b.db, server);
+    expect((await b.db.nonnegs.get(nn.id))?.time).toBe('06:00');
+    expect((await b.db.tasks.get(task.id))?.goalId).toBe(goal.id);
+    expect((await b.db.journal.get('2026-11-20'))?.excerpt).toBe('Calm day');
+    expect((await b.db.notes.get(note.id))?.title).toBe('Ideas');
+  });
+
+  it('a tick on one device survives the other device building the same day later', async () => {
+    const a = device();
+    const b = device();
+    const nn = await a.personal.createNonNeg({ title: 'Gym', time: '06:00' });
+    await pushPending(a.db, server);
+    await pullChanges(b.db, server);
+
+    // A builds today and ticks Gym; B, not yet synced, builds today too.
+    await a.personal.ensureDay('2026-11-20', '2026-11-20');
+    await a.personal.setDone(nnTaskId(nn.id, '2026-11-20'), true);
+    await b.personal.ensureDay('2026-11-20', '2026-11-20');
+
+    await pushPending(b.db, server); // B's copy is derived: nothing to upload
+    await pushPending(a.db, server);
+    await pullChanges(b.db, server);
+    expect((await b.db.tasks.get(nnTaskId(nn.id, '2026-11-20')))?.done).toBe(true);
+    expect(await b.db.tasks.where('date').equals('2026-11-20').count()).toBe(1);
   });
 });
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createScheduler, writeBackupFiles, type DirLike } from '../lib/autoBackup';
-import { exportBackup } from '../lib/backup';
+import { exportBackup, hasUserData } from '../lib/backup';
 import { todayISO } from '../lib/dates';
 import { IS_PREVIEW } from '../lib/env';
 import { db } from './repo';
@@ -80,7 +80,7 @@ export async function backupNow(): Promise<boolean> {
     }
     const backup = await exportBackup(db);
     // Never replace a good backup with an empty one (e.g. right after "Delete all data").
-    if (!backup.docs.some((d) => !d.deletedAt)) return false;
+    if (!hasUserData(backup)) return false;
     await writeBackupFiles(folder as unknown as DirLike, JSON.stringify(backup), todayISO());
     useSettings.getState().set({ lastBackupAt: Date.now() });
     useBackup.setState({ status: 'active', error: null });

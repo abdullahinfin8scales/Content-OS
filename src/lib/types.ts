@@ -138,3 +138,86 @@ export type DocPatch = Partial<
     | 'font'
   >
 >;
+
+/* ------------------------------------------------------------------ */
+/* Personal: non-negotiables, day tasks, goals, journal, notes          */
+/* ------------------------------------------------------------------ */
+
+/** A daily commitment. It appears on every day's timeline at its time. */
+export interface NonNegotiable {
+  id: ID;
+  title: string;
+  /** Local time, HH:MM. */
+  time: string;
+  order: number;
+  /** Taken off the daily list at this time; past days keep their copies. */
+  archivedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One item on a day's list: the user's own task, or a day's copy of a non-negotiable. */
+export interface Task {
+  id: ID;
+  /** Local calendar date, YYYY-MM-DD. */
+  date: string;
+  title: string;
+  /** Local time, HH:MM; null means "any time that day". */
+  time: string | null;
+  done: boolean;
+  doneAt: number | null;
+  goalId: ID | null;
+  /** Set when this task is a day's copy of a non-negotiable. */
+  nnId: ID | null;
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export const GOAL_STATUSES = ['active', 'achieved', 'dropped'] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
+
+/** An optional number to reach, e.g. 10,000 followers. */
+export interface GoalMeasure {
+  current: number;
+  target: number;
+  unit: string;
+}
+
+export interface Goal {
+  id: ID;
+  title: string;
+  /** Why this goal matters — shown as the reminder. */
+  why: string;
+  /** Local calendar dates, YYYY-MM-DD. */
+  startDate: string;
+  targetDate: string;
+  status: GoalStatus;
+  measure: GoalMeasure | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** The thoughts of one day. The id is the date, YYYY-MM-DD. */
+export interface JournalEntry {
+  id: string;
+  json: RichNode;
+  excerpt: string;
+  wordCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Note {
+  id: ID;
+  title: string;
+  json: RichNode;
+  excerpt: string;
+  wordCount: number;
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type TaskPatch = Partial<Pick<Task, 'title' | 'time' | 'goalId' | 'date'>>;
+export type GoalPatch = Partial<Pick<Goal, 'title' | 'why' | 'startDate' | 'targetDate' | 'status' | 'measure'>>;

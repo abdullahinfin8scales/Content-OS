@@ -52,7 +52,7 @@ function useTheme() {
         root.dataset.themeOwner = 'app';
       }
       const theme = resolveTheme(pref);
-      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#07080a' : '#f3f3f1');
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#000000' : '#ffffff');
     };
     apply();
     if (pref !== 'system') return;
@@ -141,7 +141,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
           <h1 className="text-[18px] font-semibold text-fg">{storage ? 'Local storage is unavailable' : 'Something went wrong'}</h1>
           <p className="mt-2 text-[13.5px] leading-relaxed text-fg-3">
             {storage
-              ? 'Infin8 Content OS keeps a working copy of your posts in your browser’s storage, which is blocked here — often by a private window or strict privacy settings. Open it in a normal window.'
+              ? 'Infin8 OS keeps a working copy of your work in your browser’s storage, which is blocked here — often by a private window or strict privacy settings. Open it in a normal window.'
               : 'An unexpected error interrupted the app. Your saved work is safe.'}
           </p>
           <pre className="mt-4 max-h-24 overflow-auto rounded-lg bg-sunken p-3 text-left text-[11px] text-fg-4">{String(this.state.error?.message ?? this.state.error)}</pre>
@@ -232,7 +232,7 @@ function Shell() {
       <main
         className={cx(
           'relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas print:block print:overflow-visible print:border-0',
-          'lg:my-2 lg:mr-2 lg:rounded-[16px] lg:border lg:border-line lg:shadow-[0_0_0_1px_rgb(0_0_0/0.2),0_20px_60px_-30px_rgb(0_0_0/0.6)]',
+          'lg:my-2 lg:mr-2 lg:rounded-[16px] lg:border lg:border-line',
           (!showSidebar || sidebarHidden) && 'lg:ml-2',
         )}
       >

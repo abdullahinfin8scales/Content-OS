@@ -1,11 +1,11 @@
 import Dexie, { type Table } from 'dexie';
-import type { CustomPlatform, Doc, DocContent, DocText, Folder, ID, Space } from './types';
+import type { CustomPlatform, Doc, DocContent, DocText, Folder, Goal, ID, JournalEntry, NonNegotiable, Note, Space, Task } from './types';
 
 /** A change waiting to be uploaded: the latest local change to one record. */
 export interface OutboxEntry {
   /** `kind:id`, e.g. `doc:abc123`. */
   key: string;
-  kind: 'space' | 'folder' | 'doc' | 'content' | 'platform';
+  kind: 'space' | 'folder' | 'doc' | 'content' | 'platform' | 'nonneg' | 'task' | 'goal' | 'journal' | 'note';
   id: ID;
   /** When the change was made on this device (ms). */
   at: number;
@@ -27,6 +27,12 @@ export class ContentDB extends Dexie {
   declare platforms: Table<CustomPlatform, ID>;
   /** Local changes not yet uploaded to the cloud copy (see src/sync). */
   declare outbox: Table<OutboxEntry, string>;
+  /** Personal: daily non-negotiables, day tasks, goals, journal and notes. */
+  declare nonnegs: Table<NonNegotiable, ID>;
+  declare tasks: Table<Task, ID>;
+  declare goals: Table<Goal, ID>;
+  declare journal: Table<JournalEntry, string>;
+  declare notes: Table<Note, ID>;
 
   constructor(name = DB_NAME) {
     super(name);
@@ -40,5 +46,6 @@ export class ContentDB extends Dexie {
     this.version(2).stores({ meta: 'key' });
     this.version(3).stores({ platforms: 'id' });
     this.version(4).stores({ outbox: 'key' });
+    this.version(5).stores({ nonnegs: 'id', tasks: 'id, date, goalId, nnId', goals: 'id', journal: 'id', notes: 'id, updatedAt' });
   }
 }

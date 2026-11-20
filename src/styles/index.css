@@ -2,36 +2,42 @@
 
 /* ------------------------------------------------------------------ */
 /* Brand tokens                                                        */
-/* The infin8scale identity is monochrome: white on near-black. Color  */
-/* is reserved for meaning (status, platform, space).                  */
+/* The infin8scale identity is monochrome: pure white on pure black.   */
+/* Color is reserved for meaning (status, platform, space).            */
 /* ------------------------------------------------------------------ */
 
-/* Dark-first: dark values on bare :root; light when the OS prefers it (unless
+/* Pure monochrome, by the user's rule: dark is #000 with #fff text, light is
+   #fff with #000 text. Every surface is the same colour; depth comes from 1px
+   hairlines, never from lighter or darker panels. Only small hints (dates,
+   placeholders, counts) use the two greys, --fg-3 and --fg-4. Colour is
+   reserved for meaning (status, platform, space).
+
+   Dark-first: dark values on bare :root; light when the OS prefers it (unless
    dark was chosen explicitly) or when light is chosen. */
 :root {
   color-scheme: dark;
-  --frame: #07080a;
-  --canvas: #0b0c0f;
-  --raised: #111217;
-  --overlay: #15161c;
-  --sunken: #090a0c;
-  --hover: rgb(255 255 255 / 0.045);
-  --active: rgb(255 255 255 / 0.085);
-  --line: rgb(255 255 255 / 0.075);
-  --line-strong: rgb(255 255 255 / 0.13);
-  --fg: #f2f3f5;
-  --fg-2: #a4a9b6;
-  --fg-3: #6c717e;
-  --fg-4: #454953;
+  --frame: #000000;
+  --canvas: #000000;
+  --raised: #000000;
+  --overlay: #000000;
+  --sunken: #000000;
+  --hover: rgb(255 255 255 / 0.06);
+  --active: rgb(255 255 255 / 0.1);
+  --line: rgb(255 255 255 / 0.12);
+  --line-strong: rgb(255 255 255 / 0.22);
+  --fg: #ffffff;
+  --fg-2: #ffffff;
+  --fg-3: #8a8a8a;
+  --fg-4: #5c5c5c;
   --brand: #ffffff;
-  --brand-fg: #07080a;
+  --brand-fg: #000000;
   --danger: #f87171;
-  --ring: rgb(255 255 255 / 0.45);
-  --selection: rgb(255 255 255 / 0.2);
-  --highlight: rgb(250 204 21 / 0.28);
-  --glow: rgb(255 255 255 / 0.06);
-  --shadow-pop: 0 18px 50px -12px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(255 255 255 / 0.07);
-  --shadow-card: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -16px rgb(0 0 0 / 0.8);
+  --ring: rgb(255 255 255 / 0.5);
+  --selection: rgb(255 255 255 / 0.22);
+  --highlight: rgb(250 204 21 / 0.3);
+  --glow: rgb(0 0 0 / 0);
+  --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.16), 0 24px 60px -12px rgb(0 0 0 / 0.9);
+  --shadow-card: none;
 
   --st-idea: #b49bff;
   --st-drafting: #f2b65e;
@@ -39,7 +45,7 @@
   --st-scheduled: #7da4ff;
   --st-posted: #5edc8d;
 
-  --sp-white: #e6e7ea;
+  --sp-white: #ffffff;
   --sp-violet: #a78bfa;
   --sp-blue: #60a5fa;
   --sp-cyan: #22d3ee;
@@ -52,28 +58,28 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme='dark']) {
     color-scheme: light;
-    --frame: #f3f3f1;
-    --canvas: #fafaf9;
+    --frame: #ffffff;
+    --canvas: #ffffff;
     --raised: #ffffff;
     --overlay: #ffffff;
-    --sunken: #efefec;
-    --hover: rgb(10 11 14 / 0.045);
-    --active: rgb(10 11 14 / 0.08);
-    --line: rgb(10 11 14 / 0.08);
-    --line-strong: rgb(10 11 14 / 0.14);
-    --fg: #0b0c0f;
-    --fg-2: #4a4f5b;
-    --fg-3: #7b808b;
-    --fg-4: #aeb2b9;
-    --brand: #0b0c0f;
+    --sunken: #ffffff;
+    --hover: rgb(0 0 0 / 0.045);
+    --active: rgb(0 0 0 / 0.08);
+    --line: rgb(0 0 0 / 0.1);
+    --line-strong: rgb(0 0 0 / 0.2);
+    --fg: #000000;
+    --fg-2: #000000;
+    --fg-3: #6b6b6b;
+    --fg-4: #a3a3a3;
+    --brand: #000000;
     --brand-fg: #ffffff;
     --danger: #dc2626;
-    --ring: rgb(10 11 14 / 0.4);
-    --selection: rgb(10 11 14 / 0.12);
+    --ring: rgb(0 0 0 / 0.45);
+    --selection: rgb(0 0 0 / 0.12);
     --highlight: rgb(250 204 21 / 0.4);
-    --glow: rgb(10 11 14 / 0.04);
-    --shadow-pop: 0 18px 50px -14px rgb(10 11 14 / 0.25), 0 0 0 1px rgb(10 11 14 / 0.08);
-    --shadow-card: 0 1px 2px 0 rgb(10 11 14 / 0.04), 0 8px 24px -18px rgb(10 11 14 / 0.25);
+    --glow: rgb(255 255 255 / 0);
+    --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.12), 0 18px 50px -14px rgb(0 0 0 / 0.22);
+    --shadow-card: none;
 
     --st-idea: #7656d6;
     --st-drafting: #b26f12;
@@ -81,7 +87,7 @@
     --st-scheduled: #3565dc;
     --st-posted: #198c4b;
 
-    --sp-white: #3b3f48;
+    --sp-white: #000000;
     --sp-violet: #7c3aed;
     --sp-blue: #2563eb;
     --sp-cyan: #0891b2;
@@ -94,28 +100,28 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --frame: #f3f3f1;
-  --canvas: #fafaf9;
+  --frame: #ffffff;
+  --canvas: #ffffff;
   --raised: #ffffff;
   --overlay: #ffffff;
-  --sunken: #efefec;
-  --hover: rgb(10 11 14 / 0.045);
-  --active: rgb(10 11 14 / 0.08);
-  --line: rgb(10 11 14 / 0.08);
-  --line-strong: rgb(10 11 14 / 0.14);
-  --fg: #0b0c0f;
-  --fg-2: #4a4f5b;
-  --fg-3: #7b808b;
-  --fg-4: #aeb2b9;
-  --brand: #0b0c0f;
+  --sunken: #ffffff;
+  --hover: rgb(0 0 0 / 0.045);
+  --active: rgb(0 0 0 / 0.08);
+  --line: rgb(0 0 0 / 0.1);
+  --line-strong: rgb(0 0 0 / 0.2);
+  --fg: #000000;
+  --fg-2: #000000;
+  --fg-3: #6b6b6b;
+  --fg-4: #a3a3a3;
+  --brand: #000000;
   --brand-fg: #ffffff;
   --danger: #dc2626;
-  --ring: rgb(10 11 14 / 0.4);
-  --selection: rgb(10 11 14 / 0.12);
+  --ring: rgb(0 0 0 / 0.45);
+  --selection: rgb(0 0 0 / 0.12);
   --highlight: rgb(250 204 21 / 0.4);
-  --glow: rgb(10 11 14 / 0.04);
-  --shadow-pop: 0 18px 50px -14px rgb(10 11 14 / 0.25), 0 0 0 1px rgb(10 11 14 / 0.08);
-  --shadow-card: 0 1px 2px 0 rgb(10 11 14 / 0.04), 0 8px 24px -18px rgb(10 11 14 / 0.25);
+  --glow: rgb(255 255 255 / 0);
+  --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.12), 0 18px 50px -14px rgb(0 0 0 / 0.22);
+  --shadow-card: none;
 
   --st-idea: #7656d6;
   --st-drafting: #b26f12;
@@ -123,7 +129,7 @@
   --st-scheduled: #3565dc;
   --st-posted: #198c4b;
 
-  --sp-white: #3b3f48;
+  --sp-white: #000000;
   --sp-violet: #7c3aed;
   --sp-blue: #2563eb;
   --sp-cyan: #0891b2;
@@ -151,10 +157,11 @@
   --color-brand-fg: var(--brand-fg);
   --color-danger: var(--danger);
 
-  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Michroma', 'Inter Variable', ui-sans-serif, sans-serif;
+  /* Geist: the soft geometric sans of the user's references (Kendo, Vercel). */
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-serif: 'Newsreader Variable', ui-serif, Georgia, serif;
-  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
 
   --shadow-pop: var(--shadow-pop);
   --shadow-card: var(--shadow-card);
@@ -213,7 +220,6 @@
     font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.5;
-    font-feature-settings: 'cv11', 'ss01', 'ss03';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -255,13 +261,13 @@
 /* ------------------------------------------------------------------ */
 
 @layer components {
-  /* Brand micro-label: wide, tracked, uppercase — echoes the wordmark. */
+  /* Section micro-label: small, soft, sentence case. */
   .label-display {
-    font-family: var(--font-display);
-    font-size: 9.5px;
-    line-height: 1.2;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.25;
+    letter-spacing: 0.005em;
     color: var(--fg-3);
   }
 
@@ -359,7 +365,6 @@
   line-height: 1.72;
   color: var(--fg);
   font-family: var(--font-sans);
-  font-feature-settings: 'cv11', 'ss01', 'ss03';
   word-wrap: break-word;
   caret-color: var(--fg);
 }
@@ -387,8 +392,8 @@
 .prose-editor h1,
 .prose-editor h2,
 .prose-editor h3 {
-  font-weight: 640;
-  letter-spacing: -0.015em;
+  font-weight: 560;
+  letter-spacing: -0.02em;
   color: var(--fg);
 }
 .prose-editor[data-font='serif'] h1,
@@ -556,7 +561,7 @@
   outline-offset: 2px;
 }
 .prose-editor strong {
-  font-weight: 650;
+  font-weight: 600;
 }
 
 /* Ghost hints from templates + the empty-doc prompt. */
@@ -580,7 +585,7 @@
 .doc-title {
   font-family: var(--font-sans);
   font-size: clamp(28px, 4vw, 40px);
-  font-weight: 680;
+  font-weight: 560;
   letter-spacing: -0.028em;
   line-height: 1.15;
 }
@@ -592,7 +597,7 @@
 }
 .doc-title[data-font='mono'] {
   font-family: var(--font-mono);
-  font-weight: 650;
+  font-weight: 560;
   letter-spacing: -0.03em;
   font-size: clamp(24px, 3.4vw, 34px);
 }

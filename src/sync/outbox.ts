@@ -18,6 +18,11 @@ export const SYNCED_TABLES = {
   docs: 'doc',
   contents: 'content',
   platforms: 'platform',
+  nonnegs: 'nonneg',
+  tasks: 'task',
+  goals: 'goal',
+  journal: 'journal',
+  notes: 'note',
 } as const;
 
 export type SyncTable = keyof typeof SYNCED_TABLES;
@@ -29,6 +34,11 @@ export const TABLE_OF: Record<RecordKind, SyncTable> = {
   doc: 'docs',
   content: 'contents',
   platform: 'platforms',
+  nonneg: 'nonnegs',
+  task: 'tasks',
+  goal: 'goals',
+  journal: 'journal',
+  note: 'notes',
 };
 
 export const SYNC_TABLE_NAMES = Object.keys(SYNCED_TABLES) as SyncTable[];

@@ -42,7 +42,7 @@ export function PlatformGlyph({ icon, name, size = 14, className }: { icon: Plat
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} className={cx('shrink-0', className)} role="img" aria-label={name}>
         <rect x="1.75" y="1.75" width="20.5" height="20.5" rx="6" fill="none" stroke="currentColor" strokeWidth="2" />
-        <text x="12" y="16.4" textAnchor="middle" fontSize="12.5" fontWeight="700" fill="currentColor" fontFamily="'Inter Variable', system-ui, sans-serif">
+        <text x="12" y="16.4" textAnchor="middle" fontSize="12.5" fontWeight="600" fill="currentColor" fontFamily="'Geist Variable', system-ui, sans-serif">
           {icon.text}
         </text>
       </svg>

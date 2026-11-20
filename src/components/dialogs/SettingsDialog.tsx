@@ -318,7 +318,7 @@ export function SettingsDialog() {
 
         <div className="mt-5 flex items-center gap-3 text-[12px] text-fg-4">
           <Mark className="h-3.5 w-auto text-fg-3" />
-          <span>Infin8 Content OS · v0.1.0</span>
+          <span>Infin8 OS · v0.2.0</span>
         </div>
       </div>
     </Modal>
