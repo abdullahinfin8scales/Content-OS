@@ -95,6 +95,22 @@ describe('non-negotiables on a day', () => {
     expect((await db.tasks.get(nnTaskId(gym.id, TOMORROW)))!.time).toBe('05:30');
   });
 
+  it('deletes a non-negotiable for good, keeping past copies, and can put it back', async () => {
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await p.ensureDay(YESTERDAY, YESTERDAY);
+    await p.ensureDay(TODAY, TODAY);
+    const removed = await p.deleteNonNeg(gym.id, TODAY);
+    expect(await db.nonnegs.get(gym.id)).toBeUndefined();
+    expect(await db.tasks.get(nnTaskId(gym.id, TODAY))).toBeUndefined();
+    expect(await db.tasks.get(nnTaskId(gym.id, YESTERDAY))).toBeDefined();
+    await p.ensureDay(TOMORROW, TODAY);
+    expect(await dayTasks(TOMORROW)).toHaveLength(0);
+
+    await p.putBackNonNeg(removed!);
+    await p.ensureDay(TODAY, TODAY);
+    expect(await db.tasks.get(nnTaskId(gym.id, TODAY))).toBeDefined();
+  });
+
   it('reorders the list', async () => {
     const a = await p.createNonNeg({ title: 'A', time: '06:00' });
     const b = await p.createNonNeg({ title: 'B', time: '07:00' });
@@ -135,8 +151,17 @@ describe('tasks', () => {
     const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
     await p.ensureDay(TODAY, TODAY);
     const id = nnTaskId(gym.id, TODAY);
-    await expect(p.deleteTask(id)).rejects.toThrow(/Non-negotiables/);
+    await expect(p.deleteTask(id, TODAY)).rejects.toThrow(/Non-negotiables/);
     await expect(p.updateTask(id, { time: '08:00' })).rejects.toThrow(/Non-negotiables/);
+  });
+
+  it('lets a past day’s copy of a non-negotiable be deleted, and never rebuilds it', async () => {
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await p.ensureDay(YESTERDAY, YESTERDAY);
+    const removed = await p.deleteTask(nnTaskId(gym.id, YESTERDAY), TODAY);
+    expect(removed?.nnId).toBe(gym.id);
+    await p.ensureDay(YESTERDAY, TODAY);
+    expect(await db.tasks.get(nnTaskId(gym.id, YESTERDAY))).toBeUndefined();
   });
 
   it('moves unfinished own tasks to another day, leaving done ones and non-negotiables', async () => {

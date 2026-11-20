@@ -4,7 +4,7 @@ import { todayISO } from '../lib/dates';
 import { navigate, parseHash, paths } from '../lib/router';
 import type { Goal, NonNegotiable, Note, Task } from '../lib/types';
 import { reportError } from './actions';
-import { toast } from './feedback';
+import { confirmDialog, toast } from './feedback';
 import { db, personal } from './repo';
 import { useUI } from './ui';
 
@@ -108,4 +108,63 @@ export async function deleteNoteWithUndo(id: string, leave: boolean) {
   if (!note) return;
   if (leave) navigate(paths.notes(), { replace: true });
   toast('Note deleted', { action: { label: 'Undo', run: () => void personal.restoreNote(note) } });
+}
+
+/* ------------------------------ Removing ------------------------------ */
+
+/** Deletes a task (undo in the toast). On today or later, a non-negotiable's copy removes the non-negotiable from every day instead. */
+export async function deleteTaskWithUndo(task: Task, today: string) {
+  try {
+    if (task.nnId && task.date >= today) {
+      await removeNonNegWithUndo({ id: task.nnId, title: task.title }, today);
+      return;
+    }
+    const removed = await personal.deleteTask(task.id, today);
+    if (removed) toast('Task deleted', { action: { label: 'Undo', run: () => void personal.restoreTask(removed) } });
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+/** Takes a non-negotiable off today and every later day; past days keep it (undo in the toast). */
+export async function removeNonNegWithUndo(nn: Pick<NonNegotiable, 'id' | 'title'>, today: string) {
+  try {
+    await personal.archiveNonNeg(nn.id, today);
+    toast(`Removed “${nn.title}” from your days`, { action: { label: 'Undo', run: () => void personal.restoreNonNeg(nn.id) } });
+  } catch (err) {
+    reportError(err);
+  }
+}
+
+/** Deletes a removed non-negotiable for good, after asking. Past days keep their copies. */
+export async function deleteNonNegForever(nn: NonNegotiable, today: string) {
+  const ok = await confirmDialog({
+    title: `Delete “${nn.title}” for good?`,
+    message: 'It leaves this list. Days it was already on keep it as history.',
+    confirmLabel: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
+  const removed = await personal.deleteNonNeg(nn.id, today).catch(reportError);
+  if (removed) toast('Non-negotiable deleted', { action: { label: 'Undo', run: () => void personal.putBackNonNeg(removed) } });
+}
+
+/** Deletes a goal after asking; its tasks stay on their days, unlinked (undo in the toast). */
+export async function deleteGoalWithConfirm(goal: Goal, linkedCount: number, leave: boolean) {
+  const ok = await confirmDialog({
+    title: `Delete “${goal.title}”?`,
+    message: linkedCount ? `Its ${linkedCount} linked task${linkedCount === 1 ? '' : 's'} stay on their days, unlinked.` : undefined,
+    confirmLabel: 'Delete goal',
+    danger: true,
+  });
+  if (!ok) return;
+  const undo = await personal.deleteGoal(goal.id).catch(reportError);
+  if (leave) navigate(paths.goals(), { replace: true });
+  if (undo) toast('Goal deleted', { action: { label: 'Undo', run: () => void personal.restoreGoal(undo.goal, undo.taskIds) } });
+}
+
+/** Deletes a note after asking (undo in the toast). */
+export async function deleteNoteWithConfirm(note: Pick<Note, 'id' | 'title'>, leave: boolean) {
+  const ok = await confirmDialog({ title: `Delete “${note.title || 'Untitled'}”?`, confirmLabel: 'Delete note', danger: true });
+  if (ok) await deleteNoteWithUndo(note.id, leave);
 }

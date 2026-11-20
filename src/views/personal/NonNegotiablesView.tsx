@@ -1,8 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Repeat, RotateCcw, X } from 'lucide-react';
+import { Repeat, RotateCcw } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { PageHeader, TopBar } from '../../components/TopBar';
-import { Button, cx, IconButton } from '../../components/ui/Button';
+import { Button, cx } from '../../components/ui/Button';
 import { TimePicker } from '../../components/ui/TimePicker';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { addDays, formatDate, parseISODate, toISODate } from '../../lib/dates';
@@ -11,9 +11,9 @@ import { clockLabel } from '../../lib/personalText';
 import type { NonNegotiable, Task } from '../../lib/types';
 import { reportError } from '../../state/actions';
 import { toast } from '../../state/feedback';
-import { usePersonalLists, useToday } from '../../state/personal';
+import { deleteNonNegForever, removeNonNegWithUndo, usePersonalLists, useToday } from '../../state/personal';
 import { db, personal } from '../../state/repo';
-import { Page, SectionLabel } from './parts';
+import { DeleteButton, Page, SectionLabel } from './parts';
 
 export function NonNegotiablesView() {
   const lists = usePersonalLists();
@@ -68,6 +68,7 @@ export function NonNegotiablesView() {
                   <Button size="sm" variant="ghost" icon={<RotateCcw size={13} />} onClick={() => void personal.restoreNonNeg(nn.id)}>
                     Put back
                   </Button>
+                  <DeleteButton label={`Delete “${nn.title}” for good`} onClick={() => void deleteNonNegForever(nn, today)} />
                 </div>
               ))}
             </div>
@@ -161,17 +162,7 @@ function NonNegRow({ nn, week, copies, today }: { nn: NonNegotiable; week: strin
           );
         })}
       </div>
-      <IconButton
-        label={`Remove ${nn.title}`}
-        size="sm"
-        className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-lg:opacity-100"
-        onClick={async () => {
-          await personal.archiveNonNeg(nn.id, today).catch(reportError);
-          toast(`Removed “${nn.title}” from your days`, { action: { label: 'Undo', run: () => void personal.restoreNonNeg(nn.id) } });
-        }}
-      >
-        <X size={15} />
-      </IconButton>
+      <DeleteButton label={`Remove “${nn.title}”`} onClick={() => void removeNonNegWithUndo(nn, today)} />
     </div>
   );
 }

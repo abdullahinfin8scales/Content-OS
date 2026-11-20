@@ -6,10 +6,10 @@ import { Button, cx, IconButton } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { formatRelative } from '../../lib/dates';
 import { navigate, paths } from '../../lib/router';
-import { confirmDialog, openMenu } from '../../state/feedback';
-import { deleteNoteWithUndo, newNote, usePersonalLists } from '../../state/personal';
+import { openMenu } from '../../state/feedback';
+import { deleteNoteWithConfirm, newNote, usePersonalLists } from '../../state/personal';
 import { db, personal } from '../../state/repo';
-import { Page } from './parts';
+import { DeleteButton, Page } from './parts';
 import { RichNote } from './RichNote';
 
 export function NotesView() {
@@ -34,16 +34,23 @@ export function NotesView() {
         ) : (
           <div className="divide-y divide-line border-y border-line">
             {notes?.map((n) => (
-              <a key={n.id} href={paths.note(n.id)} className="group flex items-start gap-3 px-1 py-4 transition-colors hover:bg-hover">
+              <div key={n.id} className="group relative flex items-start gap-3 px-1 py-4 transition-colors hover:bg-hover">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     {n.pinned && <Pin size={12} className="shrink-0 text-fg-3" />}
-                    <span className={cx('truncate text-[14.5px] font-medium', n.title ? 'text-fg' : 'text-fg-3')}>{n.title || 'Untitled'}</span>
+                    {/* The title link stretches over the whole row; the trash button sits above it. */}
+                    <a
+                      href={paths.note(n.id)}
+                      className={cx('truncate text-[14.5px] font-medium outline-none after:absolute after:inset-0 focus-visible:after:outline-2 focus-visible:after:outline-[var(--ring)]', n.title ? 'text-fg' : 'text-fg-3')}
+                    >
+                      {n.title || 'Untitled'}
+                    </a>
                   </div>
                   {n.excerpt && <p className="mt-1 line-clamp-2 text-[13.5px] leading-relaxed text-fg-3">{n.excerpt}</p>}
                 </div>
                 <span className="shrink-0 pt-0.5 text-[12px] text-fg-3">{formatRelative(n.updatedAt)}</span>
-              </a>
+                <DeleteButton label={`Delete note “${n.title || 'Untitled'}”`} className="-mt-1" onClick={() => void deleteNoteWithConfirm(n, false)} />
+              </div>
             ))}
           </div>
         )}
@@ -76,6 +83,7 @@ export function NoteView({ id }: { id: string }) {
         crumbs={[{ label: 'Notes', href: paths.notes(), icon: <StickyNote size={14} /> }, { label: note.title || 'Untitled' }]}
         actions={
           <>
+            <DeleteButton label="Delete note" size="md" onClick={() => void deleteNoteWithConfirm(note, true)} />
             <IconButton label={note.pinned ? 'Unpin' : 'Pin to top'} active={note.pinned} onClick={() => void personal.updateNote(note.id, { pinned: !note.pinned })}>
               {note.pinned ? <PinOff size={16} /> : <Pin size={16} />}
             </IconButton>
@@ -89,10 +97,7 @@ export function NoteView({ id }: { id: string }) {
                       label: 'Delete note',
                       icon: <Trash2 size={14} />,
                       danger: true,
-                      onSelect: async () => {
-                        const ok = await confirmDialog({ title: 'Delete this note?', confirmLabel: 'Delete', danger: true });
-                        if (ok) await deleteNoteWithUndo(note.id, true);
-                      },
+                      onSelect: () => void deleteNoteWithConfirm(note, true),
                     },
                   ],
                   { align: 'end', minWidth: 180 },

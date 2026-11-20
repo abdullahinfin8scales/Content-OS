@@ -10,11 +10,11 @@ import { daysLeftLabel, parseTaskInput } from '../../lib/personalText';
 import { navigate, paths } from '../../lib/router';
 import type { Goal, GoalMeasure, Task } from '../../lib/types';
 import { reportError } from '../../state/actions';
-import { confirmDialog, openMenu, toast } from '../../state/feedback';
-import { useToday } from '../../state/personal';
+import { openMenu } from '../../state/feedback';
+import { deleteGoalWithConfirm, useToday } from '../../state/personal';
 import { db, personal } from '../../state/repo';
 import { TaskRow } from './DayView';
-import { Page, ProgressBar, progressText, SectionLabel } from './parts';
+import { DeleteButton, Page, ProgressBar, progressText, SectionLabel } from './parts';
 
 export function GoalView({ id }: { id: string }) {
   const goal = useLiveQuery(async () => (await db.goals.get(id)) ?? null, [id]);
@@ -49,45 +49,37 @@ function GoalPage({ goal, linked, today }: { goal: Goal; linked: Task[]; today: 
 
   const setStatus = (status: Goal['status']) => void personal.updateGoal(goal.id, { status }).catch(reportError);
 
-  const remove = async () => {
-    const ok = await confirmDialog({
-      title: 'Delete this goal?',
-      message: linked.length ? `Its ${linked.length} linked task${linked.length === 1 ? '' : 's'} stay on their days, unlinked.` : undefined,
-      confirmLabel: 'Delete goal',
-      danger: true,
-    });
-    if (!ok) return;
-    const undo = await personal.deleteGoal(goal.id);
-    navigate(paths.goals(), { replace: true });
-    if (undo) toast('Goal deleted', { action: { label: 'Undo', run: () => void personal.restoreGoal(undo.goal, undo.taskIds) } });
-  };
+  const remove = () => deleteGoalWithConfirm(goal, linked.length, true);
 
   return (
     <>
       <TopBar
         crumbs={[{ label: 'Goals', href: paths.goals(), icon: <Target size={14} /> }, { label: goal.title }]}
         actions={
-          <IconButton
-            label="Goal options"
-            onClick={(e) =>
-              openMenu(
-                e.currentTarget,
-                [
-                  ...(goal.status === 'active'
-                    ? [
-                        { label: 'Mark achieved', icon: <Check size={14} />, onSelect: () => setStatus('achieved') },
-                        { label: 'Drop this goal', icon: <X size={14} />, onSelect: () => setStatus('dropped') },
-                      ]
-                    : [{ label: 'Make active again', icon: <RotateCcw size={14} />, onSelect: () => setStatus('active') }]),
-                  { type: 'separator' },
-                  { label: 'Delete goal', icon: <Trash2 size={14} />, danger: true, onSelect: () => void remove() },
-                ],
-                { align: 'end', minWidth: 200 },
-              )
-            }
-          >
-            <Ellipsis size={16} />
-          </IconButton>
+          <>
+            <DeleteButton label="Delete goal" size="md" onClick={() => void remove()} />
+            <IconButton
+              label="Goal options"
+              onClick={(e) =>
+                openMenu(
+                  e.currentTarget,
+                  [
+                    ...(goal.status === 'active'
+                      ? [
+                          { label: 'Mark achieved', icon: <Check size={14} />, onSelect: () => setStatus('achieved') },
+                          { label: 'Drop this goal', icon: <X size={14} />, onSelect: () => setStatus('dropped') },
+                        ]
+                      : [{ label: 'Make active again', icon: <RotateCcw size={14} />, onSelect: () => setStatus('active') }]),
+                    { type: 'separator' },
+                    { label: 'Delete goal', icon: <Trash2 size={14} />, danger: true, onSelect: () => void remove() },
+                  ],
+                  { align: 'end', minWidth: 200 },
+                )
+              }
+            >
+              <Ellipsis size={16} />
+            </IconButton>
+          </>
         }
       />
       <Page>

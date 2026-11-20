@@ -122,6 +122,24 @@ export class PersonalRepo {
     await this.db.nonnegs.update(id, { archivedAt: null, updatedAt: Date.now() });
   }
 
+  /**
+   * Deletes a non-negotiable for good (from the Removed list). Its not-done copies
+   * today and later go with it; past days keep their copies as history.
+   * Returns it, so it can be put back.
+   */
+  async deleteNonNeg(id: ID, today = todayISO()): Promise<NonNegotiable | undefined> {
+    const nn = await this.db.nonnegs.get(id);
+    if (!nn) return undefined;
+    await this.db.nonnegs.delete(id);
+    await this.syncCopies(id, today);
+    return nn;
+  }
+
+  /** Puts back a non-negotiable deleted with `deleteNonNeg`. */
+  async putBackNonNeg(nn: NonNegotiable): Promise<void> {
+    await this.db.nonnegs.put({ ...nn, updatedAt: Date.now() });
+  }
+
   /** Brings the not-done copies of one non-negotiable, today and later, in line with it. */
   private async syncCopies(nnId: ID, today: string): Promise<void> {
     const nn = await this.db.nonnegs.get(nnId);
@@ -235,10 +253,15 @@ export class PersonalRepo {
   }
 
   /** Deletes one of the user's own tasks and returns it (for undo). Non-negotiable copies can't be deleted. */
-  async deleteTask(id: ID): Promise<Task | undefined> {
+  /**
+   * Deletes a task and returns it (for undo). A non-negotiable's copy can only be
+   * deleted from a past day; today and later it comes back until the
+   * non-negotiable itself is removed (`archiveNonNeg`).
+   */
+  async deleteTask(id: ID, today = todayISO()): Promise<Task | undefined> {
     const task = await this.db.tasks.get(id);
     if (!task) return undefined;
-    if (task.nnId) throw new PersonalError('Non-negotiables stay on every day. Remove it from the Non-negotiables page.');
+    if (task.nnId && task.date >= today) throw new PersonalError('Non-negotiables stay on every day. Remove it from the Non-negotiables page.');
     await this.db.tasks.delete(id);
     return task;
   }

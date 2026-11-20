@@ -6,7 +6,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { addDays, isISODate, toISODate } from '../../lib/dates';
 import { navigate, paths } from '../../lib/router';
 import { reportError } from '../../state/actions';
-import { useGoalTasks, usePersonalLists, useToday } from '../../state/personal';
+import { deleteGoalWithConfirm, useGoalTasks, usePersonalLists, useToday } from '../../state/personal';
 import { personal } from '../../state/repo';
 import { GoalCard, Page, SectionLabel } from './parts';
 
@@ -46,7 +46,14 @@ export function GoalsView() {
             <SectionLabel>Active</SectionLabel>
             <div className="grid gap-3 sm:grid-cols-2">
               {active.map((g) => (
-                <GoalCard key={g.id} goal={g} linked={goalTasks?.get(g.id) ?? []} today={today} large />
+                <GoalCard
+                  key={g.id}
+                  goal={g}
+                  linked={goalTasks?.get(g.id) ?? []}
+                  today={today}
+                  large
+                  onDelete={() => void deleteGoalWithConfirm(g, goalTasks?.get(g.id)?.length ?? 0, false)}
+                />
               ))}
             </div>
           </section>
@@ -57,7 +64,13 @@ export function GoalsView() {
             <SectionLabel>Achieved and dropped</SectionLabel>
             <div className="grid gap-3 sm:grid-cols-2">
               {closed.map((g) => (
-                <GoalCard key={g.id} goal={g} linked={goalTasks?.get(g.id) ?? []} today={today} />
+                <GoalCard
+                  key={g.id}
+                  goal={g}
+                  linked={goalTasks?.get(g.id) ?? []}
+                  today={today}
+                  onDelete={() => void deleteGoalWithConfirm(g, goalTasks?.get(g.id)?.length ?? 0, false)}
+                />
               ))}
             </div>
           </section>

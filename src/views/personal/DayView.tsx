@@ -12,11 +12,11 @@ import { navigate, paths } from '../../lib/router';
 import type { Goal, Task } from '../../lib/types';
 import { reportError } from '../../state/actions';
 import { openMenu, toast, type MenuItem } from '../../state/feedback';
-import { useGoalTasks, useNow, usePersonalLists, useToday } from '../../state/personal';
+import { deleteTaskWithUndo, useGoalTasks, useNow, usePersonalLists, useToday } from '../../state/personal';
 import { db, personal } from '../../state/repo';
 import { useSettings } from '../../state/settings';
 import { useUI } from '../../state/ui';
-import { GoalCard, Page, ProgressBar, SectionLabel, TaskCheck } from './parts';
+import { DeleteButton, GoalCard, Page, ProgressBar, SectionLabel, TaskCheck } from './parts';
 import { RichNote } from './RichNote';
 
 const shift = (date: string, days: number) => toISODate(addDays(parseISODate(date), days));
@@ -397,9 +397,21 @@ export function TaskRow({ task, goal, goals, day, today, showDate }: { task: Tas
     else setTitle(task.title);
   };
 
+  const upcoming = task.date >= today;
+  const deleteLabel = isNN ? (upcoming ? `Remove “${task.title}” from every day` : `Delete “${task.title}” from this day`) : `Delete “${task.title}”`;
+  const remove = () => void deleteTaskWithUndo(task, today);
+
   const menu = (anchor: HTMLElement) => {
     if (isNN) {
-      openMenu(anchor, [{ label: 'Edit non-negotiables', icon: <Repeat size={14} />, onSelect: () => navigate(paths.nonnegotiables()) }], { align: 'end', minWidth: 210 });
+      openMenu(
+        anchor,
+        [
+          { label: 'Edit non-negotiables', icon: <Repeat size={14} />, onSelect: () => navigate(paths.nonnegotiables()) },
+          { type: 'separator' },
+          { label: upcoming ? 'Remove from every day' : 'Delete from this day', icon: <Trash2 size={14} />, danger: true, onSelect: remove },
+        ],
+        { align: 'end', minWidth: 220 },
+      );
       return;
     }
     const otherDay = day === today ? shift(day, 1) : today;
@@ -418,15 +430,7 @@ export function TaskRow({ task, goal, goals, day, today, showDate }: { task: Tas
             ]
           : []),
         { type: 'separator' },
-        {
-          label: 'Delete',
-          icon: <Trash2 size={14} />,
-          danger: true,
-          onSelect: async () => {
-            const removed = await personal.deleteTask(task.id).catch(reportError);
-            if (removed) toast('Task deleted', { action: { label: 'Undo', run: () => void personal.restoreTask(removed) } });
-          },
-        },
+        { label: 'Delete', icon: <Trash2 size={14} />, danger: true, onSelect: remove },
       ],
       { align: 'end', minWidth: 220 },
     );
@@ -491,15 +495,12 @@ export function TaskRow({ task, goal, goals, day, today, showDate }: { task: Tas
           </div>
         )}
       </div>
-      <IconButton
-        label="Task options"
-        size="xs"
-        tip={false}
-        className="mt-px opacity-0 group-hover/task:opacity-100 focus-visible:opacity-100 max-lg:opacity-100"
-        onClick={(e) => menu(e.currentTarget)}
-      >
-        <Ellipsis size={14} />
-      </IconButton>
+      <div className="-my-0.5 flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover/task:opacity-100 focus-within:opacity-100 max-lg:opacity-100">
+        <IconButton label="Task options" size="sm" tip={false} className="text-fg-3!" onClick={(e) => menu(e.currentTarget)}>
+          <Ellipsis size={15} />
+        </IconButton>
+        <DeleteButton label={deleteLabel} onClick={remove} />
+      </div>
     </div>
   );
 }
