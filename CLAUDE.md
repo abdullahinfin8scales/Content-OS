@@ -86,5 +86,7 @@ Run `npm test` and `npm run build` before every commit. Check UI changes in a re
 
 ## Git
 
-- Develop on the branch named for the session and push there; don't push to `main` or open pull requests unless the user asks.
+- `main` is the repository's main line (since 2026-11-21) and matches the live site. Older branches: `claude/blissful-volta-gdoa6f` (the old Content-OS-only app; never deploy from it) and `personal-os` (already in `main`).
+- On the user's PC (`e:\Task os\app`) work on `main`; commit, push and deploy when the user asks ("push and deploy"). Deploy from there with `netlify deploy --prod --dir=dist --site=ff4fa68f-aed1-4e7f-9570-9a61c4cf60bd` (the Netlify CLI is signed in as the user).
+- In cloud sessions, develop on the branch named for the session and push there; don't push to `main` or open pull requests unless the user asks.
 - Before significant work, confirm push access with `git push --dry-run origin HEAD` (mistake 001).

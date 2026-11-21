@@ -6,3 +6,4 @@ coverage
 .vite
 dist-preview
 *.tsbuildinfo
+.netlify
