@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowRight,
   ArrowUp,
   ArrowUpToLine,
@@ -37,7 +38,9 @@ import type { Goal, NonNegotiable, Task } from '../../lib/types';
 import { reportError } from '../../state/actions';
 import { openMenu, toast, type MenuItem } from '../../state/feedback';
 import {
+  dayWords,
   deleteTaskWithUndo,
+  moveTaskWithUndo,
   removeDayItemWithUndo,
   removeNonNegWithUndo,
   skipDayWords,
@@ -566,8 +569,10 @@ export function TaskRow({
       );
       return;
     }
-    const otherDay = day === today ? shift(day, 1) : today;
-    const moveTo = (to: 'top' | 'up' | 'down') => void personal.moveTask(task.id, to).catch(reportError);
+    const prevDay = shift(task.date, -1);
+    const nextDay = shift(task.date, 1);
+    const moveToDay = (to: string) => void moveTaskWithUndo(task, to, today);
+    const moveTo =(to: 'top' | 'up' | 'down') => void personal.moveTask(task.id, to).catch(reportError);
     openMenu(
       anchor,
       [
@@ -581,7 +586,9 @@ export function TaskRow({
           : []),
         { label: task.time ? 'Change time' : 'Set a time', icon: <Clock size={14} />, onSelect: () => setTimeEdit(true) },
         ...(task.time ? [{ label: 'Make it anytime', icon: <X size={14} />, onSelect: () => void personal.updateTask(task.id, { time: null }).catch(reportError) }] : []),
-        { label: day === today ? 'Move to tomorrow' : 'Move to today', icon: <ArrowRight size={14} />, onSelect: () => void personal.updateTask(task.id, { date: otherDay }).catch(reportError) },
+        { label: `Move to ${dayWords(prevDay, today)}`, icon: <ArrowLeft size={14} />, onSelect: () => moveToDay(prevDay) },
+        { label: `Move to ${dayWords(nextDay, today)}`, icon: <ArrowRight size={14} />, onSelect: () => moveToDay(nextDay) },
+        ...(task.date !== today && prevDay !== today && nextDay !== today ? [{ label: 'Move to today', icon: <Sun size={14} />, onSelect: () => moveToDay(today) }] : []),
         ...(goals.length
           ? [
               { type: 'separator' as const },

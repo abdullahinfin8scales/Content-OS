@@ -410,6 +410,29 @@ export class PersonalRepo {
     return this.placeTask(id, { hour, afterId: rest[j - 1]?.id ?? null, beforeId: rest[j]?.id ?? null });
   }
 
+  /**
+   * Moves one of the user's tasks to another day, e.g. "Move to tomorrow" or back
+   * to the day before. It goes to the end of that day, unless `order` is given
+   * (undo puts it back where it was). Returns where it came from, for undo, or
+   * undefined when nothing moved.
+   */
+  async moveTaskToDay(id: ID, date: string, order?: number): Promise<{ date: string; order: number } | undefined> {
+    if (!isISODate(date)) throw new PersonalError('Pick a valid day.');
+    return this.db.transaction('rw', this.db.tasks, async () => {
+      const task = await this.db.tasks.get(id);
+      if (!task) return undefined;
+      if (task.nnId) throw new PersonalError('Change a non-negotiable from the Non-negotiables page.');
+      if (task.date === date) return undefined;
+      let next = order;
+      if (next === undefined) {
+        const sameDay = await this.db.tasks.where('date').equals(date).toArray();
+        next = sameDay.reduce((max, x) => Math.max(max, x.order), -1) + 1;
+      }
+      await this.db.tasks.update(id, { date, order: next, updatedAt: Date.now() });
+      return { date: task.date, order: task.order };
+    });
+  }
+
   /** Moves the user's own unfinished tasks from one day to another. Returns how many moved. */
   async moveUnfinished(fromDate: string, toDate: string): Promise<number> {
     if (!isISODate(fromDate) || !isISODate(toDate) || fromDate === toDate) return 0;

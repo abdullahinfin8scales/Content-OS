@@ -146,6 +146,25 @@ export async function skipNonNegWithUndo(nn: Pick<NonNegotiable, 'id' | 'title'>
   }
 }
 
+/** "yesterday", "today", "tomorrow", or a date like "Mon, Nov 23". */
+export function dayWords(date: string, today: string): string {
+  const rel = relativeDayName(date, today);
+  return rel ? rel.toLowerCase() : formatDate(date, { weekday: true });
+}
+
+/** Moves a task to another day (undo in the toast puts it back on its old day, in its old place). */
+export async function moveTaskWithUndo(task: Pick<Task, 'id' | 'title'>, date: string, today: string) {
+  try {
+    const from = await personal.moveTaskToDay(task.id, date);
+    if (!from) return;
+    toast(`Moved “${task.title}” to ${dayWords(date, today)}`, {
+      action: { label: 'Undo', run: () => void personal.moveTaskToDay(task.id, from.date, from.order).catch(reportError) },
+    });
+  } catch (err) {
+    reportError(err);
+  }
+}
+
 /** Removes a win or a loss (undo in the toast). */
 export async function removeDayItemWithUndo(date: string, kind: DayItemKind, id: string) {
   try {

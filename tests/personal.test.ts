@@ -360,6 +360,38 @@ describe('tasks', () => {
     expect(await db.tasks.get(nnTaskId(gym.id, YESTERDAY))).toBeUndefined();
   });
 
+  it('moves a task to another day, forwards or back, and undo puts it back where it was', async () => {
+    const a = await p.createTask({ date: TODAY, title: 'A' });
+    const b = await p.createTask({ date: TODAY, title: 'B' });
+    await p.createTask({ date: TOMORROW, title: 'Existing' });
+
+    const from = await p.moveTaskToDay(a.id, TOMORROW);
+    expect(from).toEqual({ date: TODAY, order: a.order });
+    expect((await dayTasks(TOMORROW)).map((t) => t.title)).toEqual(['Existing', 'A']); // goes last
+    expect((await dayTasks(TODAY)).map((t) => t.title)).toEqual(['B']);
+
+    await p.moveTaskToDay(a.id, from!.date, from!.order); // undo
+    expect((await dayTasks(TODAY)).map((t) => t.title)).toEqual(['A', 'B']);
+    expect((await dayTasks(TOMORROW)).map((t) => t.title)).toEqual(['Existing']);
+
+    // Back to the day before, from where it was moved by mistake.
+    await p.moveTaskToDay(b.id, TOMORROW);
+    await p.moveTaskToDay(b.id, TODAY);
+    expect((await dayTasks(TODAY)).map((t) => t.title)).toEqual(['A', 'B']);
+    await p.moveTaskToDay(a.id, YESTERDAY);
+    expect((await dayTasks(YESTERDAY)).map((t) => t.title)).toEqual(['A']);
+  });
+
+  it('moving to the same day does nothing; non-negotiable copies, bad days and missing tasks are handled', async () => {
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await p.ensureDay(TODAY, TODAY);
+    const a = await p.createTask({ date: TODAY, title: 'A' });
+    expect(await p.moveTaskToDay(a.id, TODAY)).toBeUndefined();
+    expect(await p.moveTaskToDay('gone', TOMORROW)).toBeUndefined();
+    await expect(p.moveTaskToDay(a.id, 'tomorrow')).rejects.toThrow(/valid day/);
+    await expect(p.moveTaskToDay(nnTaskId(gym.id, TODAY), TOMORROW)).rejects.toThrow(/Non-negotiables/);
+  });
+
   it('moves unfinished own tasks to another day, leaving done ones and non-negotiables', async () => {
     const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
     await p.ensureDay(YESTERDAY, YESTERDAY);
