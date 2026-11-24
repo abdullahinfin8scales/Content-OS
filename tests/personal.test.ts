@@ -234,6 +234,115 @@ describe('tasks', () => {
     expect(await db.tasks.get(t.id)).toBeDefined();
   });
 
+  describe('dropping a task on the day', () => {
+    const names = async (date = TODAY) => (await dayTasks(date)).map((t) => t.title);
+
+    it('puts Anytime tasks in a new order; new tasks still go last; dropping in place writes nothing', async () => {
+      const a = await p.createTask({ date: TODAY, title: 'A' });
+      const b = await p.createTask({ date: TODAY, title: 'B' });
+      const c = await p.createTask({ date: TODAY, title: 'C' });
+      expect(await p.placeTask(c.id, { hour: null, afterId: null, beforeId: a.id })).toBe(true);
+      expect(await names()).toEqual(['C', 'A', 'B']);
+      expect((await db.tasks.get(c.id))!.time).toBeNull();
+      await p.createTask({ date: TODAY, title: 'D' });
+      expect(await names()).toEqual(['C', 'A', 'B', 'D']);
+
+      await db.outbox.clear();
+      expect(await p.placeTask(c.id, { hour: null, afterId: null, beforeId: a.id })).toBe(false); // already there
+      expect(await p.placeTask(a.id, { hour: null, afterId: c.id, beforeId: b.id })).toBe(false);
+      expect(await db.outbox.count()).toBe(0);
+
+      await p.placeTask(b.id, { hour: null, afterId: c.id, beforeId: a.id }); // between C and A
+      expect(await names()).toEqual(['C', 'B', 'A', 'D']);
+    });
+
+    it('moves a task to another hour, between tasks, or back to Anytime, and its time follows', async () => {
+      const nine = await p.createTask({ date: TODAY, title: 'Nine', time: '09:00' });
+      const half = await p.createTask({ date: TODAY, title: 'Half', time: '09:30' });
+      const late = await p.createTask({ date: TODAY, title: 'Late', time: '15:00' });
+      const any = await p.createTask({ date: TODAY, title: 'Any' });
+      const timeOf = async (id: string) => (await db.tasks.get(id))!.time;
+
+      // Into an empty hour: the hour on the hour.
+      await p.placeTask(late.id, { hour: 7, afterId: null, beforeId: null });
+      expect(await timeOf(late.id)).toBe('07:00');
+      expect(await names()).toEqual(['Any', 'Late', 'Nine', 'Half']);
+      // Above the first task of an hour: that hour's start, ahead of it even when that is its time too.
+      await p.placeTask(late.id, { hour: 9, afterId: null, beforeId: nine.id });
+      expect(await timeOf(late.id)).toBe('09:00');
+      expect(await names()).toEqual(['Any', 'Late', 'Nine', 'Half']);
+      // Below a task: its time, after it.
+      await p.placeTask(late.id, { hour: 9, afterId: nine.id, beforeId: half.id });
+      expect(await timeOf(late.id)).toBe('09:00');
+      expect(await names()).toEqual(['Any', 'Nine', 'Late', 'Half']);
+      await p.placeTask(late.id, { hour: 9, afterId: half.id, beforeId: null });
+      expect(await timeOf(late.id)).toBe('09:30');
+      expect(await names()).toEqual(['Any', 'Nine', 'Half', 'Late']);
+      // Back to Anytime: no time.
+      await p.placeTask(late.id, { hour: null, afterId: any.id, beforeId: null });
+      expect(await timeOf(late.id)).toBeNull();
+      expect(await names()).toEqual(['Any', 'Late', 'Nine', 'Half']);
+      // And from Anytime into the schedule.
+      await p.placeTask(any.id, { hour: 18, afterId: null, beforeId: null });
+      expect(await timeOf(any.id)).toBe('18:00');
+    });
+
+    it('slots in between tasks at the same time, and around a non-negotiable that is never written', async () => {
+      const gym = await p.createNonNeg({ title: 'Gym', time: '09:00' });
+      await p.ensureDay(TODAY, TODAY);
+      const copy = nnTaskId(gym.id, TODAY);
+      const u = await p.createTask({ date: TODAY, title: 'U', time: '09:00' });
+      const v = await p.createTask({ date: TODAY, title: 'V' });
+      await db.outbox.clear();
+
+      await p.placeTask(v.id, { hour: 9, afterId: null, beforeId: copy }); // above Gym
+      expect(await names()).toEqual(['V', 'Gym', 'U']);
+      await p.placeTask(v.id, { hour: 9, afterId: copy, beforeId: u.id }); // between Gym and U
+      expect(await names()).toEqual(['Gym', 'V', 'U']);
+      await p.placeTask(v.id, { hour: 9, afterId: u.id, beforeId: null }); // below U
+      expect(await names()).toEqual(['Gym', 'U', 'V']);
+
+      expect((await db.outbox.toArray()).map((e) => e.key)).toEqual([`task:${v.id}`]); // only V was written
+      expect((await db.tasks.get(copy))!.order).toBe(0);
+    });
+
+    it('refuses non-negotiable copies and bad hours, and ignores tasks that are gone or neighbours from another day', async () => {
+      const gym = await p.createNonNeg({ title: 'Gym', time: '09:00' });
+      await p.ensureDay(TODAY, TODAY);
+      const a = await p.createTask({ date: TODAY, title: 'A' });
+      const other = await p.createTask({ date: YESTERDAY, title: 'Other', time: '10:00' });
+      await expect(p.placeTask(nnTaskId(gym.id, TODAY), { hour: 12, afterId: null, beforeId: null })).rejects.toThrow(/Non-negotiables/);
+      await expect(p.placeTask(a.id, { hour: 24, afterId: null, beforeId: null })).rejects.toThrow(/valid time/);
+      await expect(p.placeTask(a.id, { hour: 1.5, afterId: null, beforeId: null })).rejects.toThrow(/valid time/);
+      expect(await p.placeTask('gone', { hour: 8, afterId: null, beforeId: null })).toBe(false);
+      await p.placeTask(a.id, { hour: 10, afterId: other.id, beforeId: null });
+      expect((await db.tasks.get(a.id))!.time).toBe('10:00'); // yesterday's task above it did not count
+    });
+
+    it('moves up, down or to the top inside its own hour, never into another', async () => {
+      const a = await p.createTask({ date: TODAY, title: 'A' });
+      const b = await p.createTask({ date: TODAY, title: 'B' });
+      const c = await p.createTask({ date: TODAY, title: 'C' });
+      expect(await p.moveTask(c.id, 'top')).toBe(true);
+      expect(await names()).toEqual(['C', 'A', 'B']);
+      expect(await p.moveTask(c.id, 'up')).toBe(false);
+      expect(await p.moveTask(a.id, 'down')).toBe(true);
+      expect(await names()).toEqual(['C', 'B', 'A']);
+      expect(await p.moveTask(a.id, 'down')).toBe(false);
+      expect(await p.moveTask(b.id, 'up')).toBe(true);
+      expect(await names()).toEqual(['B', 'C', 'A']);
+
+      const x = await p.createTask({ date: TODAY, title: 'X', time: '09:00' });
+      const y = await p.createTask({ date: TODAY, title: 'Y', time: '09:30' });
+      const z = await p.createTask({ date: TODAY, title: 'Z', time: '15:00' });
+      expect(await p.moveTask(y.id, 'top')).toBe(true); // Y takes 09:00 so it can sit above X
+      expect((await db.tasks.get(y.id))!.time).toBe('09:00');
+      expect(await names()).toEqual(['B', 'C', 'A', 'Y', 'X', 'Z']);
+      expect(await p.moveTask(z.id, 'top')).toBe(false); // alone in its hour
+      expect(await p.moveTask(x.id, 'down')).toBe(false);
+    });
+  });
+
   it('protects non-negotiable copies from deletion and editing', async () => {
     const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
     await p.ensureDay(TODAY, TODAY);

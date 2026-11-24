@@ -207,14 +207,14 @@ export function TooltipHost() {
       setTip(null);
     };
     const onOver = (e: PointerEvent) => {
-      if (e.pointerType === 'touch') return;
+      if (e.pointerType === 'touch' || document.body.dataset.taskDrag) return;
       const el = (e.target as HTMLElement | null)?.closest?.('[data-tip]') as HTMLElement | null;
       if (el === target) return;
       hide();
       if (!el || !el.dataset.tip) return;
       target = el;
       timer = setTimeout(() => {
-        if (!target || !document.body.contains(target)) return;
+        if (!target || !document.body.contains(target) || document.body.dataset.taskDrag) return;
         const r = target.getBoundingClientRect();
         const below = r.top < 48;
         setTip({ text: target.dataset.tip!, key: target.dataset.tipKey, x: r.left + r.width / 2, y: below ? r.bottom + 8 : r.top - 8, below });

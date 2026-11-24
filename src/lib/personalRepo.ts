@@ -2,6 +2,7 @@ import type { ContentDB } from './db';
 import { countWords, emptyDoc, makeExcerpt, toPlainText } from './content';
 import { isISODate, parseISODate, todayISO } from './dates';
 import { uid } from './ids';
+import { hourValue } from './personalText';
 import { withoutUpload } from '../sync/outbox';
 import type { DayLoss, DayWin, Goal, GoalMeasure, GoalPatch, ID, JournalEntry, NonNegotiable, Note, RichNode, Task, TaskPatch } from './types';
 
@@ -50,6 +51,23 @@ function cleanLine(text: string): string {
 }
 
 export type DayItemKind = 'wins' | 'losses';
+
+/** Where a task was dropped: an hour block (null = the Anytime list) and the tasks just above and below the spot. */
+export interface DropSpot {
+  hour: number | null;
+  afterId: ID | null;
+  beforeId: ID | null;
+}
+
+/**
+ * The time a task takes when dropped in an hour block: the time of the task just
+ * above it when that is in the same hour (so it stays below it), otherwise the
+ * hour on the hour. Dropped in the Anytime list (null), it has no time.
+ */
+export function timeForDrop(hour: number | null, afterTime: string | null): string | null {
+  if (hour === null) return null;
+  return afterTime && Number(afterTime.slice(0, 2)) === hour ? afterTime : hourValue(hour);
+}
 
 /** Timeline order: by time (untimed first), then the order they were added. */
 export function byTime(a: Task, b: Task): number {
@@ -335,6 +353,61 @@ export class PersonalRepo {
 
   async restoreTask(task: Task): Promise<void> {
     await this.db.tasks.put({ ...task, updatedAt: Date.now() });
+  }
+
+  /**
+   * Drops one of the user's tasks at a spot on the day: into an hour block (or
+   * the Anytime list), between the two tasks `afterId` and `beforeId` that sit
+   * there (either may be missing). It lands exactly where it was dropped, and
+   * takes the time that makes that true (`timeForDrop`): the hour on the hour,
+   * or the time of the task just above it. Tasks at the same time are told apart
+   * by `order`, so the new order sits between its neighbours' (non-negotiable
+   * copies count as neighbours but are never written). Returns false when it was
+   * already there, or the task is gone.
+   */
+  async placeTask(id: ID, spot: DropSpot): Promise<boolean> {
+    if (spot.hour !== null && !(Number.isInteger(spot.hour) && spot.hour >= 0 && spot.hour <= 23)) throw new PersonalError('Pick a valid time.');
+    return this.db.transaction('rw', this.db.tasks, async () => {
+      const task = await this.db.tasks.get(id);
+      if (!task) return false;
+      if (task.nnId) throw new PersonalError('Change a non-negotiable from the Non-negotiables page.');
+      const neighbour = async (nid: ID | null) => {
+        const t = nid ? await this.db.tasks.get(nid) : undefined;
+        return t && t.id !== id && t.date === task.date ? t : undefined;
+      };
+      const after = await neighbour(spot.afterId);
+      const before = await neighbour(spot.beforeId);
+      const time = timeForDrop(spot.hour, after?.time ?? null);
+      const lo = after && after.time === time ? after.order : -Infinity;
+      const hi = before && before.time === time ? before.order : Infinity;
+      // Already there: same time, and its order already sits between its neighbours'.
+      if (task.time === time && task.order > lo && task.order < hi) return false;
+      let order = task.order;
+      if (lo !== -Infinity && hi !== Infinity) order = (lo + hi) / 2;
+      else if (lo !== -Infinity) order = lo + 1;
+      else if (hi !== Infinity) order = hi - 1;
+      await this.db.tasks.update(id, { time, order, updatedAt: Date.now() });
+      return true;
+    });
+  }
+
+  /**
+   * Moves one of the user's tasks up or down one place, or to the top, inside
+   * its own hour block (or the Anytime list). To go further, drag it or change
+   * its time. Returns whether it moved.
+   */
+  async moveTask(id: ID, to: 'top' | 'up' | 'down'): Promise<boolean> {
+    const task = await this.db.tasks.get(id);
+    if (!task || task.nnId) return false;
+    const hour = task.time ? Number(task.time.slice(0, 2)) : null;
+    const zone = (await this.db.tasks.where('date').equals(task.date).toArray())
+      .filter((x) => (x.time ? Number(x.time.slice(0, 2)) : null) === hour)
+      .sort(byTime);
+    const i = zone.findIndex((x) => x.id === id);
+    const rest = zone.filter((x) => x.id !== id);
+    const j = to === 'top' ? 0 : to === 'up' ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j > rest.length || j === i) return false;
+    return this.placeTask(id, { hour, afterId: rest[j - 1]?.id ?? null, beforeId: rest[j]?.id ?? null });
   }
 
   /** Moves the user's own unfinished tasks from one day to another. Returns how many moved. */

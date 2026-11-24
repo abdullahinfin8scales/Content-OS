@@ -22,6 +22,8 @@ Several Playwright runs failed or passed for the wrong reasons:
 - Write test scripts with the file-writing tool and keep Bash commands short and separate.
 - Pass `exact: true` to `getByRole(…, { name })` and `getByLabel`: names match as substrings by default, so "Loss" also finds "Add a loss" (2026-11-20).
 - Several toasts can be open at once: click the Undo inside the toast you mean, not `.first()`.
+- Scroll an element into view before using its `boundingBox()` for mouse or touch actions: below the fold, the pointer lands on nothing and the test "passes" a check that never changed anything. Assert the before and the after, so a check can't pass with nothing happening (2026-11-24).
+- Screenshots taken mid-drag need a short wait too: rows slide for ~150 ms, and a row hidden behind the dragged one looks missing.
 
 ## Where
 Playwright test scripts

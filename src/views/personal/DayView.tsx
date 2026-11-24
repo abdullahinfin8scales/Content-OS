@@ -1,7 +1,10 @@
 import type { Editor } from '@tiptap/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
+  ArrowDown,
   ArrowRight,
+  ArrowUp,
+  ArrowUpToLine,
   CalendarDays,
   CalendarOff,
   CalendarX,
@@ -10,6 +13,7 @@ import {
   ChevronRight,
   Clock,
   Ellipsis,
+  GripVertical,
   Lightbulb,
   Minus,
   Plus,
@@ -47,6 +51,7 @@ import { useSettings } from '../../state/settings';
 import { useUI } from '../../state/ui';
 import { DeleteButton, GoalCard, Page, ProgressBar, SectionLabel, TaskCheck } from './parts';
 import { RichNote } from './RichNote';
+import { resetSortStyles, startTaskDrag } from './taskSort';
 
 const shift = (date: string, days: number) => toISODate(addDays(parseISODate(date), days));
 const hourOf = (time: string) => Number(time.slice(0, 2));
@@ -347,19 +352,43 @@ function Timeline({
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const nowHour = now.getHours();
 
+  // Each task's place inside its own hour block (or the Anytime list), for the "Move up / down" menu.
+  const zoneInfo = useMemo(() => {
+    const zones = new Map<string, Task[]>();
+    for (const t of tasks) {
+      const key = t.time ? `h${hourOf(t.time)}` : 'any';
+      const list = zones.get(key);
+      if (list) list.push(t);
+      else zones.set(key, [t]);
+    }
+    const info = new Map<string, { index: number; size: number }>();
+    for (const list of zones.values()) list.forEach((t, index) => info.set(t.id, { index, size: list.length }));
+    return info;
+  }, [tasks]);
+
+  // A drag leaves a copy of the row at its landing spot until the day re-renders with the task there: clear it then, before paint.
+  useLayoutEffect(() => resetSortStyles(), [tasks]);
+
   const row = (t: Task) => (
-    <TaskRow key={t.id} task={t} goal={t.goalId ? goalById.get(t.goalId) : undefined} nn={t.nnId ? nnById.get(t.nnId) : undefined} goals={goals} day={day} today={today} />
+    <TaskRow
+      key={t.id}
+      task={t}
+      goal={t.goalId ? goalById.get(t.goalId) : undefined}
+      nn={t.nnId ? nnById.get(t.nnId) : undefined}
+      goals={goals}
+      day={day}
+      today={today}
+      zone={zoneInfo.get(t.id)}
+    />
   );
 
   return (
     <>
       <section className="mb-8" aria-label="Anytime">
         <SectionLabel>Anytime</SectionLabel>
-        {anytime.length === 0 ? (
-          <p className="px-2 py-1.5 text-[13px] text-fg-3">Tasks without a time land here.</p>
-        ) : (
-          <div className="space-y-px">{anytime.map(row)}</div>
-        )}
+        <div data-drop-zone="anytime" className="space-y-px">
+          {anytime.length === 0 ? <p className="px-2 py-1.5 text-[13px] text-fg-3">Tasks without a time land here.</p> : anytime.map(row)}
+        </div>
       </section>
 
       <section className="mb-12" aria-label="Schedule">
@@ -386,7 +415,7 @@ function Timeline({
                     </IconButton>
                   )}
                 </div>
-                <div className="min-w-0 flex-1 py-1">
+                <div data-drop-zone={`hour-${h}`} className="min-w-0 flex-1 py-1">
                   {before.map(row)}
                   {current && <NowLine />}
                   {after.map(row)}
@@ -466,6 +495,7 @@ export function TaskRow({
   today,
   showDate,
   nn,
+  zone,
 }: {
   task: Task;
   goal?: Goal;
@@ -475,7 +505,10 @@ export function TaskRow({
   showDate?: boolean;
   /** The non-negotiable this task is a copy of, when it is one. */
   nn?: NonNegotiable;
+  /** Set on a day's page: where this task sits in its hour block (or the Anytime list), and how many are there. Your own tasks then get a drag handle. */
+  zone?: { index: number; size: number };
 }) {
+  const rowRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [timeEdit, setTimeEdit] = useState(false);
@@ -534,9 +567,18 @@ export function TaskRow({
       return;
     }
     const otherDay = day === today ? shift(day, 1) : today;
+    const moveTo = (to: 'top' | 'up' | 'down') => void personal.moveTask(task.id, to).catch(reportError);
     openMenu(
       anchor,
       [
+        ...(zone && zone.size > 1
+          ? [
+              ...(zone.index > 0 ? [{ label: 'Move to top', icon: <ArrowUpToLine size={14} />, onSelect: () => moveTo('top') }] : []),
+              ...(zone.index > 1 ? [{ label: 'Move up', icon: <ArrowUp size={14} />, onSelect: () => moveTo('up') }] : []),
+              ...(zone.index < zone.size - 1 ? [{ label: 'Move down', icon: <ArrowDown size={14} />, onSelect: () => moveTo('down') }] : []),
+              { type: 'separator' as const },
+            ]
+          : []),
         { label: task.time ? 'Change time' : 'Set a time', icon: <Clock size={14} />, onSelect: () => setTimeEdit(true) },
         ...(task.time ? [{ label: 'Make it anytime', icon: <X size={14} />, onSelect: () => void personal.updateTask(task.id, { time: null }).catch(reportError) }] : []),
         { label: day === today ? 'Move to tomorrow' : 'Move to today', icon: <ArrowRight size={14} />, onSelect: () => void personal.updateTask(task.id, { date: otherDay }).catch(reportError) },
@@ -556,7 +598,13 @@ export function TaskRow({
   };
 
   return (
-    <div className="group/task flex items-start gap-3 rounded-lg px-2 py-[7px] transition-colors hover:bg-hover">
+    <div
+      ref={rowRef}
+      data-task-row=""
+      data-task-id={task.id}
+      data-time={task.time ?? ''}
+      className="group/task flex items-start gap-3 rounded-lg px-2 py-[7px] transition-colors hover:bg-hover data-[dragging=true]:opacity-35"
+    >
       <TaskCheck className="mt-[3px]" done={task.done} label={task.done ? `Mark “${task.title}” not done` : `Mark “${task.title}” done`} onToggle={() => void personal.setDone(task.id, !task.done)} />
       <div className="min-w-0 flex-1">
         {editing ? (
@@ -615,6 +663,20 @@ export function TaskRow({
         )}
       </div>
       <div className="-my-0.5 flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover/task:opacity-100 focus-within:opacity-100 max-lg:opacity-100">
+        {zone && !isNN && (
+          <IconButton
+            label={`Drag “${task.title}” to move it`}
+            size="sm"
+            tip={false}
+            data-tip="Drag to move or reorder"
+            data-sort-handle={task.id}
+            className="cursor-grab touch-none text-fg-3!"
+            onPointerDown={(e) => rowRef.current && startTaskDrag(e, rowRef.current, (spot) => personal.placeTask(task.id, spot))}
+            onClick={(e) => e.preventDefault()}
+          >
+            <GripVertical size={15} />
+          </IconButton>
+        )}
         <IconButton label="Task options" size="sm" tip={false} className="text-fg-3!" onClick={(e) => menu(e.currentTarget)}>
           <Ellipsis size={15} />
         </IconButton>

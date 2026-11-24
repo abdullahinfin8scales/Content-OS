@@ -23,6 +23,7 @@ Mistakes made while building this project, each turned into a rule. Every agent 
 17. **Short, structured messages:** one-line summary, then numbered steps or bullets; bold what the user must do; never drop an important detail to save space. → [017](017-long-messages-hid-details.md)
 18. **Times use `TimePicker`, never `<input type="time">`** (its segments are fiddly to type into). Hover buttons must not cover another control in the row. → [018](018-native-time-input.md)
 19. **Clear an add box and move focus before any `await`,** never after the save; test add flows typing at full speed. → [019](019-focus-moved-after-async-save.md)
+20. **A drag must be a real drag:** the item lands where it is dropped and its time/order is set for the user; show the landing spot and time before the drop. Never send the user to a form to finish it. → [020](020-drag-limited-to-same-time.md)
 
 ## Adding a mistake
 
