@@ -25,6 +25,7 @@ export function TimePicker({
   suggest = '09:00',
   allowClear,
   clearLabel = 'No time',
+  emptyChosen,
   variant = 'chip',
   defaultOpen,
   onClose,
@@ -40,6 +41,8 @@ export function TimePicker({
   /** Offer a first option that removes the time. */
   allowClear?: boolean;
   clearLabel?: string;
+  /** An empty value is a real choice (e.g. Anytime), not "nothing picked yet": shown as set, and ticked in the list. */
+  emptyChosen?: boolean;
   variant?: Variant;
   defaultOpen?: boolean;
   onClose?: () => void;
@@ -47,6 +50,7 @@ export function TimePicker({
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const button = useRef<HTMLButtonElement>(null);
+  const set = value !== null || !!emptyChosen;
   const close = (refocus: boolean) => {
     setOpen(false);
     if (refocus) button.current?.focus();
@@ -64,9 +68,9 @@ export function TimePicker({
         className={cx(
           'inline-flex shrink-0 items-center whitespace-nowrap transition-colors',
           BUTTON[variant],
-          value ? 'border-line-strong text-fg' : 'border-line text-fg-3 hover:text-fg',
-          variant === 'inline' && !value && 'border-transparent',
-          variant === 'inline' && value && 'border-transparent hover:border-line',
+          set ? 'border-line-strong text-fg' : 'border-line text-fg-3 hover:text-fg',
+          variant === 'inline' && !set && 'border-transparent',
+          variant === 'inline' && set && 'border-transparent hover:border-line',
           open && 'border-fg-3!',
           className,
         )}
@@ -81,6 +85,7 @@ export function TimePicker({
           suggest={suggest}
           allowClear={allowClear}
           clearLabel={clearLabel}
+          emptyChosen={emptyChosen}
           onPick={(v) => {
             onChange(v);
             close(true);
@@ -101,6 +106,7 @@ function TimeList({
   suggest,
   allowClear,
   clearLabel,
+  emptyChosen,
   onPick,
   onDismiss,
 }: {
@@ -109,6 +115,7 @@ function TimeList({
   suggest: string;
   allowClear?: boolean;
   clearLabel: string;
+  emptyChosen?: boolean;
   onPick: (value: string | null) => void;
   onDismiss: (refocus: boolean) => void;
 }) {
@@ -223,7 +230,7 @@ function TimeList({
       <div ref={list} id={`${id}-list`} role="listbox" aria-label="Times" className="relative min-h-0 flex-1 overflow-y-auto p-1">
         {options.length === 0 && <div className="px-3 py-3 text-[12.5px] text-fg-3">Not a time — try “6:30pm” or “18:30”.</div>}
         {options.map((v, i) => {
-          const selected = v === value;
+          const selected = v === value && (v !== null || !!emptyChosen);
           return (
             <div
               key={v ?? 'clear'}

@@ -119,6 +119,22 @@ describe('non-negotiables on a day', () => {
     expect(sorted).toEqual([b.id, a.id]);
   });
 
+  it('an Anytime non-negotiable has no time: it lands in each day’s untimed list, and can take a time and go back', async () => {
+    const water = await p.createNonNeg({ title: 'Drink water', time: null });
+    expect(water.time).toBeNull();
+    await p.ensureDay(TODAY, TODAY);
+    const id = nnTaskId(water.id, TODAY);
+    expect(await db.tasks.get(id)).toMatchObject({ title: 'Drink water', time: null, nnId: water.id });
+    expect(await p.ensureDay(TODAY, TODAY)).toBe(false); // nothing to change on a second look
+
+    await p.updateNonNeg(water.id, { time: '08:00' }, TODAY);
+    expect((await db.tasks.get(id))!.time).toBe('08:00');
+    await p.updateNonNeg(water.id, { time: null }, TODAY);
+    expect((await db.tasks.get(id))!.time).toBeNull();
+    await expect(p.updateNonNeg(water.id, { time: '' }, TODAY)).rejects.toThrow(/valid time/);
+    expect((await db.nonnegs.get(water.id))!.time).toBeNull();
+  });
+
   it('refuses a missing or invalid time', async () => {
     await expect(p.createNonNeg({ title: 'Gym', time: '' })).rejects.toThrow(/time/);
     await expect(p.createNonNeg({ title: 'Gym', time: '25:00' })).rejects.toThrow(/time/);
@@ -232,6 +248,32 @@ describe('tasks', () => {
     expect(await db.tasks.get(t.id)).toBeUndefined();
     await p.restoreTask(removed!);
     expect(await db.tasks.get(t.id)).toBeDefined();
+  });
+
+  it('sets, changes and clears a task’s priority; moving it keeps the priority; junk and non-negotiable copies are refused', async () => {
+    const plain = await p.createTask({ date: TODAY, title: 'Plain' });
+    expect(plain.priority).toBeNull();
+    const hot = await p.createTask({ date: TODAY, title: 'Hot', priority: 'important' });
+    expect((await db.tasks.get(hot.id))!.priority).toBe('important');
+
+    await p.updateTask(plain.id, { priority: 'needed' });
+    expect((await db.tasks.get(plain.id))!.priority).toBe('needed');
+    await p.updateTask(plain.id, { priority: 'low' });
+    expect((await db.tasks.get(plain.id))!.priority).toBe('low');
+    await p.updateTask(plain.id, { priority: null });
+    expect((await db.tasks.get(plain.id))!.priority).toBeNull();
+    await p.updateTask(hot.id, { title: 'Hot, still' }); // other edits leave it alone
+    expect((await db.tasks.get(hot.id))!.priority).toBe('important');
+
+    await p.placeTask(hot.id, { hour: 14, afterId: null, beforeId: null });
+    await p.moveTaskToDay(hot.id, TOMORROW);
+    expect(await db.tasks.get(hot.id)).toMatchObject({ date: TOMORROW, time: '14:00', priority: 'important' });
+
+    await expect(p.updateTask(plain.id, { priority: 'urgent' as never })).rejects.toThrow(/valid priority/);
+    await expect(p.createTask({ date: TODAY, title: 'X', priority: 'urgent' as never })).rejects.toThrow(/valid priority/);
+    const gym = await p.createNonNeg({ title: 'Gym', time: '06:00' });
+    await p.ensureDay(TODAY, TODAY);
+    await expect(p.updateTask(nnTaskId(gym.id, TODAY), { priority: 'low' })).rejects.toThrow(/Non-negotiables/);
   });
 
   describe('dropping a task on the day', () => {

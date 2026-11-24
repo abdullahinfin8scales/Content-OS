@@ -45,7 +45,12 @@ export interface PersonalLists {
   notes: Note[];
 }
 
-const byTimeThenOrder = (a: NonNegotiable, b: NonNegotiable) => (a.time < b.time ? -1 : a.time > b.time ? 1 : a.order - b.order);
+/** Anytime ones first, like the day's Anytime list, then by time. */
+const byTimeThenOrder = (a: NonNegotiable, b: NonNegotiable) => {
+  const ta = a.time ?? '';
+  const tb = b.time ?? '';
+  return ta < tb ? -1 : ta > tb ? 1 : a.order - b.order;
+};
 const byDeadline = (a: Goal, b: Goal) => (a.targetDate < b.targetDate ? -1 : a.targetDate > b.targetDate ? 1 : a.createdAt - b.createdAt);
 
 /** Non-negotiables, goals and notes, live. Undefined while loading. */

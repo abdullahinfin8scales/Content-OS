@@ -5,10 +5,24 @@ import { formatDate } from '../../lib/dates';
 import { goalProgress } from '../../lib/personalRepo';
 import { daysLeftLabel } from '../../lib/personalText';
 import { paths } from '../../lib/router';
-import type { Goal, Task } from '../../lib/types';
+import type { Goal, Task, TaskPriority } from '../../lib/types';
+import { PRIORITY } from './priority';
 
 /** Round tick box used by every task row. */
-export function TaskCheck({ done, onToggle, label, className }: { done: boolean; onToggle: () => void; label: string; className?: string }) {
+export function TaskCheck({
+  done,
+  onToggle,
+  label,
+  className,
+  priority,
+}: {
+  done: boolean;
+  onToggle: () => void;
+  label: string;
+  className?: string;
+  /** Rings the box in its priority colour while the task is open. */
+  priority?: TaskPriority | null;
+}) {
   return (
     <button
       type="button"
@@ -18,7 +32,7 @@ export function TaskCheck({ done, onToggle, label, className }: { done: boolean;
       onClick={onToggle}
       className={cx(
         'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors',
-        done ? 'border-brand bg-brand text-brand-fg' : 'border-fg-3 text-transparent hover:border-fg',
+        done ? 'border-brand bg-brand text-brand-fg' : cx('text-transparent', priority ? PRIORITY[priority].ring : 'border-fg-3 hover:border-fg'),
         className,
       )}
     >

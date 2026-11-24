@@ -4,7 +4,7 @@ import { isISODate, parseISODate, todayISO } from './dates';
 import { uid } from './ids';
 import { hourValue } from './personalText';
 import { withoutUpload } from '../sync/outbox';
-import type { DayLoss, DayWin, Goal, GoalMeasure, GoalPatch, ID, JournalEntry, NonNegotiable, Note, RichNode, Task, TaskPatch } from './types';
+import { TASK_PRIORITIES, type DayLoss, type DayWin, type Goal, type GoalMeasure, type GoalPatch, type ID, type JournalEntry, type NonNegotiable, type Note, type RichNode, type Task, type TaskPatch, type TaskPriority } from './types';
 
 export class PersonalError extends Error {}
 
@@ -12,6 +12,10 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export function isHHMM(value: unknown): value is string {
   return typeof value === 'string' && HHMM.test(value);
+}
+
+export function isTaskPriority(value: unknown): value is TaskPriority {
+  return typeof value === 'string' && (TASK_PRIORITIES as readonly string[]).includes(value);
 }
 
 /** A day's copy of a non-negotiable has a fixed id, so two devices can never make two copies. */
@@ -116,8 +120,9 @@ export class PersonalRepo {
 
   /* ------------------------- Non-negotiables ------------------------- */
 
-  async createNonNeg(input: { title: string; time: string; days?: readonly number[] }): Promise<NonNegotiable> {
-    if (!isHHMM(input.time)) throw new PersonalError('Pick a time for this non-negotiable.');
+  /** `time` is HH:MM, or null for Anytime (it then sits in each day's Anytime list). */
+  async createNonNeg(input: { title: string; time: string | null; days?: readonly number[] }): Promise<NonNegotiable> {
+    if (input.time !== null && !isHHMM(input.time)) throw new PersonalError('Pick a time for this non-negotiable.');
     const days = cleanDays(input.days ?? ALL_DAYS);
     return this.db.transaction('rw', this.db.nonnegs, async () => {
       const all = await this.db.nonnegs.toArray();
@@ -139,13 +144,13 @@ export class PersonalRepo {
   }
 
   /** Changes a non-negotiable. Today and later follow at once; past days keep what they had. */
-  async updateNonNeg(id: ID, patch: { title?: string; time?: string; days?: readonly number[] }, today = todayISO()): Promise<void> {
+  async updateNonNeg(id: ID, patch: { title?: string; time?: string | null; days?: readonly number[] }, today = todayISO()): Promise<void> {
     const nn = await this.db.nonnegs.get(id);
     if (!nn) throw new PersonalError('That non-negotiable no longer exists.');
     const next: Partial<NonNegotiable> = { updatedAt: Date.now() };
     if (patch.title !== undefined) next.title = cleanTitle(patch.title, nn.title);
     if (patch.time !== undefined) {
-      if (!isHHMM(patch.time)) throw new PersonalError('Pick a valid time.');
+      if (patch.time !== null && !isHHMM(patch.time)) throw new PersonalError('Pick a valid time.');
       next.time = patch.time;
     }
     if (patch.days !== undefined) next.days = cleanDays(patch.days);
@@ -288,10 +293,12 @@ export class PersonalRepo {
 
   /* ------------------------------ Tasks ------------------------------ */
 
-  async createTask(input: { date: string; title: string; time?: string | null; goalId?: ID | null }): Promise<Task> {
+  async createTask(input: { date: string; title: string; time?: string | null; goalId?: ID | null; priority?: TaskPriority | null }): Promise<Task> {
     if (!isISODate(input.date)) throw new PersonalError('A task needs a day.');
     const time = input.time ?? null;
     if (time !== null && !isHHMM(time)) throw new PersonalError('Pick a valid time.');
+    const priority = input.priority ?? null;
+    if (priority !== null && !isTaskPriority(priority)) throw new PersonalError('Pick a valid priority.');
     return this.db.transaction('rw', this.db.tasks, async () => {
       const sameDay = await this.db.tasks.where('date').equals(input.date).toArray();
       const t = Date.now();
@@ -303,6 +310,7 @@ export class PersonalRepo {
         done: false,
         doneAt: null,
         goalId: input.goalId ?? null,
+        priority,
         nnId: null,
         order: sameDay.reduce((max, x) => Math.max(max, x.order), -1) + 1,
         createdAt: t,
@@ -316,7 +324,7 @@ export class PersonalRepo {
   async updateTask(id: ID, patch: TaskPatch): Promise<void> {
     const task = await this.db.tasks.get(id);
     if (!task) throw new PersonalError('That task no longer exists.');
-    if (task.nnId && (patch.title !== undefined || patch.time !== undefined || patch.date !== undefined)) {
+    if (task.nnId && (patch.title !== undefined || patch.time !== undefined || patch.date !== undefined || patch.priority !== undefined)) {
       throw new PersonalError('Change a non-negotiable from the Non-negotiables page.');
     }
     const next: Partial<Task> = { updatedAt: Date.now() };
@@ -330,6 +338,10 @@ export class PersonalRepo {
       next.date = patch.date;
     }
     if (patch.goalId !== undefined) next.goalId = patch.goalId;
+    if (patch.priority !== undefined) {
+      if (patch.priority !== null && !isTaskPriority(patch.priority)) throw new PersonalError('Pick a valid priority.');
+      next.priority = patch.priority;
+    }
     await this.db.tasks.update(id, next);
   }
 

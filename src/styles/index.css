@@ -32,6 +32,10 @@
   --brand: #ffffff;
   --brand-fg: #000000;
   --danger: #f87171;
+  /* Task priorities, the only coloured things in the app: important (red), needs to get completed (blue), not important (green). */
+  --pri-important: #ff5b5b;
+  --pri-needed: #4da3ff;
+  --pri-low: #3ddc84;
   --ring: rgb(255 255 255 / 0.5);
   --selection: rgb(255 255 255 / 0.22);
   --highlight: rgb(250 204 21 / 0.3);
@@ -74,6 +78,9 @@
     --brand: #000000;
     --brand-fg: #ffffff;
     --danger: #dc2626;
+    --pri-important: #dc2626;
+    --pri-needed: #2563eb;
+    --pri-low: #16a34a;
     --ring: rgb(0 0 0 / 0.45);
     --selection: rgb(0 0 0 / 0.12);
     --highlight: rgb(250 204 21 / 0.4);
@@ -116,6 +123,9 @@
   --brand: #000000;
   --brand-fg: #ffffff;
   --danger: #dc2626;
+  --pri-important: #dc2626;
+  --pri-needed: #2563eb;
+  --pri-low: #16a34a;
   --ring: rgb(0 0 0 / 0.45);
   --selection: rgb(0 0 0 / 0.12);
   --highlight: rgb(250 204 21 / 0.4);
@@ -156,6 +166,9 @@
   --color-brand: var(--brand);
   --color-brand-fg: var(--brand-fg);
   --color-danger: var(--danger);
+  --color-pri-important: var(--pri-important);
+  --color-pri-needed: var(--pri-needed);
+  --color-pri-low: var(--pri-low);
 
   /* Geist: the soft geometric sans of the user's references (Kendo, Vercel). */
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;

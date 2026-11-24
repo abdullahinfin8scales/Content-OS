@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Clock,
   Ellipsis,
+  Flag,
   GripVertical,
   Lightbulb,
   Minus,
@@ -34,7 +35,7 @@ import { addDays, formatLongDate, parseISODate, toISODate, weekStartsOn } from '
 import { byTime, nnDays, nnOnDate } from '../../lib/personalRepo';
 import { clockLabel, daysSummary, hourLabel, hourValue, minutesOf, nextQuarterHour, parseTaskInput, relativeDayName, weekdayName } from '../../lib/personalText';
 import { navigate, paths } from '../../lib/router';
-import type { Goal, NonNegotiable, Task } from '../../lib/types';
+import type { Goal, NonNegotiable, Task, TaskPriority } from '../../lib/types';
 import { reportError } from '../../state/actions';
 import { openMenu, toast, type MenuItem } from '../../state/feedback';
 import {
@@ -54,6 +55,7 @@ import { useSettings } from '../../state/settings';
 import { useUI } from '../../state/ui';
 import { DeleteButton, GoalCard, Page, ProgressBar, SectionLabel, TaskCheck } from './parts';
 import { RichNote } from './RichNote';
+import { openPriorityMenu, PRIORITY, PriorityDot } from './priority';
 import { resetSortStyles, startTaskDrag } from './taskSort';
 
 const shift = (date: string, days: number) => toISODate(addDays(parseISODate(date), days));
@@ -198,6 +200,7 @@ function AddTaskBar({ day, isToday, goals }: { day: string; isToday: boolean; go
   const [text, setText] = useState('');
   const [time, setTime] = useState('');
   const [goalId, setGoalId] = useState<string | null>(null);
+  const [priority, setPriority] = useState<TaskPriority | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const dayFocus = useUI((s) => s.dayFocus);
 
@@ -216,9 +219,10 @@ function AddTaskBar({ day, isToday, goals }: { day: string; isToday: boolean; go
     e.preventDefault();
     if (!text.trim()) return;
     try {
-      await personal.createTask({ date: day, title: parsed.title, time: finalTime, goalId });
+      await personal.createTask({ date: day, title: parsed.title, time: finalTime, goalId, priority });
       setText('');
       setTime('');
+      setPriority(null);
     } catch (err) {
       reportError(err);
     }
@@ -253,6 +257,18 @@ function AddTaskBar({ day, isToday, goals }: { day: string; isToday: boolean; go
           clearLabel="Anytime"
           suggest={isToday ? nextQuarterHour() : '09:00'}
         />
+        <button
+          type="button"
+          aria-label={priority ? `Priority: ${PRIORITY[priority].label}` : 'Set a priority'}
+          onClick={(e) => openPriorityMenu(e.currentTarget, priority, setPriority)}
+          className={cx(
+            'flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[12px] transition-colors',
+            priority ? 'border-line-strong text-fg' : 'border-line text-fg-3 hover:text-fg',
+          )}
+        >
+          {priority ? <PriorityDot priority={priority} /> : <Flag size={13} className="shrink-0" />}
+          <span className="truncate">{priority ? PRIORITY[priority].label : 'Priority'}</span>
+        </button>
         {goals.length > 0 && (
           <button
             type="button"
@@ -604,6 +620,20 @@ export function TaskRow({
     );
   };
 
+  const priorityButton = (
+    <IconButton
+      label={task.priority ? `Priority of “${task.title}”: ${PRIORITY[task.priority].label}. Change it` : `Set a priority for “${task.title}”`}
+      size="sm"
+      tip={false}
+      data-tip={task.priority ? PRIORITY[task.priority].label : 'Set priority'}
+      data-priority={task.priority ?? ''}
+      className={cx('-my-0.5', task.priority ? PRIORITY[task.priority].flag : 'text-fg-3!')}
+      onClick={(e) => openPriorityMenu(e.currentTarget, task.priority, (p) => void personal.updateTask(task.id, { priority: p }).catch(reportError))}
+    >
+      <Flag size={15} fill={task.priority ? 'currentColor' : 'none'} />
+    </IconButton>
+  );
+
   return (
     <div
       ref={rowRef}
@@ -612,7 +642,7 @@ export function TaskRow({
       data-time={task.time ?? ''}
       className="group/task flex items-start gap-3 rounded-lg px-2 py-[7px] transition-colors hover:bg-hover data-[dragging=true]:opacity-35"
     >
-      <TaskCheck className="mt-[3px]" done={task.done} label={task.done ? `Mark “${task.title}” not done` : `Mark “${task.title}” done`} onToggle={() => void personal.setDone(task.id, !task.done)} />
+      <TaskCheck className="mt-[3px]" priority={task.priority} done={task.done} label={task.done ? `Mark “${task.title}” not done` : `Mark “${task.title}” done`} onToggle={() => void personal.setDone(task.id, !task.done)} />
       <div className="min-w-0 flex-1">
         {editing ? (
           <input
@@ -669,7 +699,10 @@ export function TaskRow({
           </div>
         )}
       </div>
+      {/* A set priority stays fully visible; an unset one hides with the other buttons until the row is hovered. */}
+      {!isNN && task.priority && priorityButton}
       <div className="-my-0.5 flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover/task:opacity-100 focus-within:opacity-100 max-lg:opacity-100">
+        {!isNN && !task.priority && priorityButton}
         {zone && !isNN && (
           <IconButton
             label={`Drag “${task.title}” to move it`}

@@ -47,7 +47,7 @@ export function NonNegotiablesView() {
             compact
             icon={<Repeat size={26} />}
             title="No non-negotiables yet"
-            body="Add the things you do no matter what — gym, reading, no sugar. Give each a time and its days, and it will sit at that hour on each of those days."
+            body="Add the things you do no matter what — gym, reading, no sugar. Give each a time (or Anytime) and its days, and it will show up on each of those days."
           />
         ) : (
           <section className="mt-8">
@@ -66,7 +66,7 @@ export function NonNegotiablesView() {
             <div className="divide-y divide-line border-y border-line">
               {archived.map((nn) => (
                 <div key={nn.id} className="flex items-center gap-3 px-1 py-2.5">
-                  <span className="w-[72px] shrink-0 text-[12.5px] text-fg-3 tabular-nums">{clockLabel(nn.time)}</span>
+                  <span className="w-[72px] shrink-0 text-[12.5px] text-fg-3 tabular-nums">{nn.time ? clockLabel(nn.time) : 'Anytime'}</span>
                   <span className="min-w-0 flex-1 truncate text-[14px] text-fg-3">{nn.title}</span>
                   <Button size="sm" variant="ghost" icon={<RotateCcw size={13} />} onClick={() => void personal.restoreNonNeg(nn.id)}>
                     Put back
@@ -118,19 +118,21 @@ function WeekdayPicker({ value, onChange, label, start }: { value: number[]; onC
 
 function AddForm({ start }: { start: 0 | 1 }) {
   const [time, setTime] = useState('');
+  const [anytime, setAnytime] = useState(false); // "Anytime" picked on purpose, as opposed to nothing picked yet
   const [title, setTitle] = useState('');
   const [days, setDays] = useState<number[]>([...ALL_DAYS]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    if (!isHHMM(time)) {
-      toast('Pick a time for this non-negotiable', { tone: 'error' });
+    if (!anytime && !isHHMM(time)) {
+      toast('Pick a time (or Anytime) for this non-negotiable', { tone: 'error' });
       return;
     }
     try {
-      await personal.createNonNeg({ title, time, days });
+      await personal.createNonNeg({ title, time: anytime ? null : time, days });
       setTitle('');
       setTime('');
+      setAnytime(false);
       setDays([...ALL_DAYS]);
     } catch (err) {
       reportError(err);
@@ -139,7 +141,21 @@ function AddForm({ start }: { start: 0 | 1 }) {
   return (
     <form onSubmit={submit} className="rounded-2xl border border-line-strong p-2">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <TimePicker variant="field" label="Time" value={time || null} onChange={(v) => setTime(v ?? '')} placeholder="Pick a time" suggest="07:00" className="sm:w-[150px]" />
+        <TimePicker
+          variant="field"
+          label="Time"
+          value={time || null}
+          onChange={(v) => {
+            setTime(v ?? '');
+            setAnytime(v === null);
+          }}
+          placeholder={anytime ? 'Anytime' : 'Pick a time'}
+          allowClear
+          clearLabel="Anytime"
+          emptyChosen={anytime}
+          suggest="07:00"
+          className="sm:w-[150px]"
+        />
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -147,7 +163,7 @@ function AddForm({ start }: { start: 0 | 1 }) {
           className="h-10 min-w-0 flex-1 bg-transparent px-2 text-[14.5px] text-fg outline-none placeholder:text-fg-3"
           aria-label="Non-negotiable"
         />
-        <Button type="submit" variant="primary" disabled={!title.trim() || !time}>
+        <Button type="submit" variant="primary" disabled={!title.trim() || (!time && !anytime)}>
           Add
         </Button>
       </div>
@@ -177,7 +193,11 @@ function NonNegRow({ nn, week, copies, today, start }: { nn: NonNegotiable; week
           variant="inline"
           label={`Time for ${nn.title}`}
           value={nn.time}
-          onChange={(v) => v && v !== nn.time && void personal.updateNonNeg(nn.id, { time: v }, today).catch(reportError)}
+          onChange={(v) => v !== nn.time && void personal.updateNonNeg(nn.id, { time: v }, today).catch(reportError)}
+          placeholder="Anytime"
+          allowClear
+          clearLabel="Anytime"
+          emptyChosen
           className="w-[124px]"
         />
         <input

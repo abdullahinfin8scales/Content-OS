@@ -122,6 +122,22 @@ describe('backup', () => {
     expect(day.losses).toEqual([expect.objectContaining({ id: loss!.id, text: 'Slept late', lesson: 'Phone out of the bedroom' })]);
   });
 
+  it('round-trips an Anytime non-negotiable and a task’s priority; unknown priorities are dropped', async () => {
+    const a = await fresh();
+    const p = new PersonalRepo(a.db);
+    const water = await p.createNonNeg({ title: 'Drink water', time: null });
+    const task = await p.createTask({ date: '2026-11-20', title: 'Ship it', priority: 'important' });
+    const plain = await p.createTask({ date: '2026-11-20', title: 'Plain' });
+
+    const backup = JSON.parse(JSON.stringify(await exportBackup(a.db)));
+    backup.tasks.find((t: { id: string }) => t.id === plain.id).priority = 'urgent'; // not one of ours
+    const b = await fresh();
+    await restoreBackup(b.db, parseBackup(backup));
+    expect((await b.db.nonnegs.get(water.id))!.time).toBeNull();
+    expect((await b.db.tasks.get(task.id))!.priority).toBe('important');
+    expect((await b.db.tasks.get(plain.id))!.priority ?? null).toBeNull();
+  });
+
   it('drops a task link to a goal that is not in the backup', () => {
     const parsed = parseBackup({
       app: 'infin8-content-os',

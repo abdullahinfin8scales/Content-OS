@@ -1,7 +1,7 @@
 import type { ContentDB } from './db';
 import { countChars, countWords, emptyDoc, makeExcerpt, toPlainText } from './content';
 import { isISODate } from './dates';
-import { isHHMM } from './personalRepo';
+import { isHHMM, isTaskPriority } from './personalRepo';
 import {
   GOAL_STATUSES,
   METRIC_KEYS,
@@ -208,13 +208,14 @@ const nullableTime = (v: unknown): string | null => (isHHMM(v) ? v : null);
 const richDoc = (v: unknown): RichNode => (isObj(v) ? (v as RichNode) : emptyDoc());
 
 function normalizeNonNeg(raw: unknown, index: number): NonNegotiable[] {
-  if (!isObj(raw) || typeof raw.id !== 'string' || !raw.id || !isHHMM(raw.time)) return [];
+  // A time is HH:MM, or null for Anytime; a record with no time at all is not one of ours.
+  if (!isObj(raw) || typeof raw.id !== 'string' || !raw.id || !(raw.time === null || isHHMM(raw.time))) return [];
   const t = Date.now();
   return [
     {
       id: raw.id,
       title: str(raw.title, 'Untitled'),
-      time: raw.time,
+      time: raw.time as string | null,
       order: num(raw.order, index),
       archivedAt: nullableNum(raw.archivedAt),
       ...(Array.isArray(raw.days) && raw.days.some(isWeekday) ? { days: [...new Set(raw.days.filter(isWeekday))].sort((a, b) => a - b) } : {}),
@@ -251,6 +252,7 @@ function normalizeTask(raw: unknown, index: number): Task[] {
       done: raw.done === true,
       doneAt: nullableNum(raw.doneAt),
       goalId: nullableStr(raw.goalId),
+      ...(isTaskPriority(raw.priority) ? { priority: raw.priority } : {}),
       nnId: nullableStr(raw.nnId),
       order: num(raw.order, index),
       createdAt: num(raw.createdAt, t),

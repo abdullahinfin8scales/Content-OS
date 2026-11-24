@@ -147,8 +147,8 @@ export type DocPatch = Partial<
 export interface NonNegotiable {
   id: ID;
   title: string;
-  /** Local time, HH:MM. */
-  time: string;
+  /** Local time, HH:MM; null means Anytime (it sits in the day's Anytime list). */
+  time: string | null;
   order: number;
   /** Taken off the daily list at this time; past days keep their copies. */
   archivedAt: number | null;
@@ -159,6 +159,10 @@ export interface NonNegotiable {
   createdAt: number;
   updatedAt: number;
 }
+
+/** How much a task matters: important (red), needs to get completed (blue), not important (green). */
+export const TASK_PRIORITIES = ['important', 'needed', 'low'] as const;
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 /** One item on a day's list: the user's own task, or a day's copy of a non-negotiable. */
 export interface Task {
@@ -171,6 +175,8 @@ export interface Task {
   done: boolean;
   doneAt: number | null;
   goalId: ID | null;
+  /** Missing or null = no priority set (older tasks have none). */
+  priority?: TaskPriority | null;
   /** Set when this task is a day's copy of a non-negotiable. */
   nnId: ID | null;
   order: number;
@@ -244,5 +250,5 @@ export interface Note {
   updatedAt: number;
 }
 
-export type TaskPatch = Partial<Pick<Task, 'title' | 'time' | 'goalId' | 'date'>>;
+export type TaskPatch = Partial<Pick<Task, 'title' | 'time' | 'goalId' | 'date' | 'priority'>>;
 export type GoalPatch = Partial<Pick<Goal, 'title' | 'why' | 'startDate' | 'targetDate' | 'status' | 'measure'>>;
